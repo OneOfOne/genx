@@ -1,5 +1,6 @@
 // +build ignore
-package all_types
+
+package genx
 
 type KT interface{}
 type VT interface{}
@@ -7,11 +8,19 @@ type VT interface{}
 type Both struct {
 	K KT
 	V VT
+
+	Call        func(k KT) VT
+	RemoveMeToo int
 }
 
 func (b *Both) RemoveMe() {
-	b.K = KT{}
-	b.V = VT{}
+	b.K = new(KT)
+	b.V = new(VT)
+}
+
+func DoStuff(k KT) VT {
+	var b Both
+	return b.Call(k)
 }
 
 var (
