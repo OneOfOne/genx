@@ -76,7 +76,6 @@ func main() {
 	}
 	for i := range selectors {
 		key, val := selectors.Split(i)
-		log.Printf("%s = %s")
 		if key == "" {
 			continue
 		}
@@ -115,7 +114,7 @@ func main() {
 		case outPath == "", outPath == "-":
 			pf, err := pkg.MergeAll(false)
 			if err != nil {
-				log.Fatalf("error merging files: %v", err)
+				log.Fatalf("error merging files: %v\n%s", err, pf.Src)
 			}
 			fmt.Printf("%s\n", pf.Src)
 		case mergeFiles:

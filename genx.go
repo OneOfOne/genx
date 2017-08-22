@@ -7,7 +7,6 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"log"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -103,9 +102,12 @@ func (g *GenX) process(fset *token.FileSet, name string, file *ast.File) (pf Par
 		astutil.AddImport(fset, file, ip)
 	}
 
-	if g.pkgName != "" {
+	if g.pkgName != "" && g.pkgName != file.Name.Name {
 		file.Name.Name = g.pkgName
+	} else {
+		g.pkgName = file.Name.Name
 	}
+
 	var buf bytes.Buffer
 	if err = printer.Fprint(&buf, fset, astrewrite.Walk(file, g.rewrite)); err != nil {
 		return
@@ -147,32 +149,26 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			n.Name = t
 		}
 
-	case *ast.FieldList:
-		fields := n.List[:0]
-		for _, f := range n.List {
-			names := f.Names[:0]
-			for _, n := range f.Names {
-				// TODO: allow renaming fields
-				if rewr["field:"+n.Name] != "-" {
-					names = append(names, n)
-				}
+	case *ast.Field:
+		if ft := getIdent(n.Type); ft != nil {
+			if t := rewr[ft.Name]; t != "" {
+				ft.Name = t
 			}
-			// TODO (BUG):doesn't remove associated comments for some reason.
-			if f.Names = names; len(f.Names) == 0 {
-				f.Doc, f.Comment = nil, nil
-				continue
-			}
-
-			if ft := getIdent(f.Type); ft != nil {
-				if t := rewr[ft.Name]; t != "" {
-					ft.Name = t
-				}
-			}
-
-			fields = append(fields, f)
+		}
+		if len(n.Names) == 0 {
+			break
 		}
 
-		if n.List = fields; len(n.List) == 0 {
+		names := n.Names[:0]
+		for _, n := range n.Names {
+			// TODO: allow renaming fields
+			if g.isValidKey("field:" + n.Name) {
+				names = append(names, n)
+			}
+		}
+		// TODO (BUG):doesn't remove associated comments for some reason.
+		if n.Names = names; len(n.Names) == 0 {
+			n.Doc, n.Comment = nil, nil
 			return deleteNode()
 		}
 
@@ -185,36 +181,36 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 
 	case *ast.SelectorExpr:
-		if x := getIdent(n.X); x != nil {
-			var nv string
-			var single bool
-
-			if nv = g.rewriters["selector:"+x.Name+"."+n.Sel.Name]; nv == "" {
-				nv = g.rewriters["selector:"+x.Name]
-				single = nv != ""
-			}
-
-			if x.Name == "cmap" {
-				log.Printf("%#+v %q", n, nv)
-			}
-
+		if x := getIdent(n.X); x != nil && n.Sel != nil {
+			nv := g.rewriters["selector:"+x.Name+"."+n.Sel.Name]
 			if nv == "" {
+				if x.Name == g.pkgName {
+					x.Name = n.Sel.Name
+					return x, true
+				}
 				break
 			}
-
-			if single {
-				return n.Sel, false
+			if nv == "-" {
+				return deleteNode()
 			}
 			if xsel := strings.Split(nv, "."); len(xsel) == 2 {
 				x.Name, n.Sel.Name = xsel[0], xsel[1]
 			} else {
 				x.Name = nv
-				return x, false
+				return x, true
 			}
 		}
 	}
 
 	return n, true
+}
+
+func (g *GenX) isValidKey(n string) bool {
+	v, ok := g.rewriters[n]
+	if !ok {
+		return true
+	}
+	return v != "-" && v != ""
 }
 
 func getIdent(ex ast.Expr) *ast.Ident {
