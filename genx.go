@@ -57,6 +57,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		}
 		g.rewriters[k] = v
 	}
+	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\bnolint\b`))
 	return g
 }
 
