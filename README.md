@@ -1,4 +1,4 @@
-# genx : Generics For Go, Yet Again. [![GoDoc](https://godoc.org/github.com/OneOfOne/genx?status.svg)](https://godoc.org/github.com/OneOfOne/genx) [![Build Status](https://travis-ci.org/OneOfOne/genx.svg?branch=master)](https://travis-ci.org/OneOfOne/genx)
+# GenX : Generics For Go, Yet Again. [![GoDoc](https://godoc.org/github.com/OneOfOne/genx?status.svg)](https://godoc.org/github.com/OneOfOne/genx) [![Build Status](https://travis-ci.org/OneOfOne/genx.svg?branch=master)](https://travis-ci.org/OneOfOne/genx)
 
 ## Install
 
@@ -83,9 +83,21 @@ Flags:
 ➤ genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -v -o ./lmap_string_int.go
 ```
 
-### StringSet:
 
-* Input [seeds/set](https://github.com/OneOfOne/genx/tree/master/seeds/set):
+### Target native types with a fallback: [seeds/sort]((https://github.com/OneOfOne/genx/tree/master/seeds/sort))
+
+```
+➤ genx -seed sort -t KT=string -n main
+...
+func StringSlice(s []string, reverse bool) { ... }
+...
+➤ genx -seed sort -t KT=*pkg.OtherType -n main
+...
+func PkgTypeSlice(s []string, less func(i, j int) bool) { ... }
+...
+```
+
+### StringSet:  [seeds/set](https://github.com/OneOfOne/genx/tree/master/seeds/set):
 ```
 package set
 

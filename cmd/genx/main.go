@@ -202,7 +202,7 @@ func main() {
 func execCmd(c string, args ...string) (string, error) {
 	cmd := exec.Command(c, args...)
 	if verbose {
-		log.Printf("executing: %s %v", c, strings.Join(args, " "))
+		log.Printf("executing: %s %s", c, strings.Join(args, " "))
 	}
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
@@ -219,14 +219,22 @@ func goListThenGet(tags []string, path string) (out string, err error) {
 		dir = filepath.Dir(path)
 	}
 
-	if out, err = execCmd("go", "list", "-f", "{{.Dir}}", dir); err != nil && strings.Contains(out, "cannot find package") {
-		args := []string{"get", "-tags", strings.Join(tags, " ")}
+	args := []string{"-tags", strings.Join(tags, " ")}
+	if goFlags != "" {
 		args = append(args, strings.Split(goFlags, " ")...)
-		args = append(args, dir)
-		if out, err = execCmd("go", args...); err == nil && isFile {
-			out, err = execCmd("go", "list", "-f", "{{.Dir}}", dir)
+	}
+
+	args = append(args, dir)
+
+	listArgs := append([]string{"list", "-f", "{{.Dir}}"}, args...)
+
+	if out, err = execCmd("go", listArgs...); err != nil && strings.Contains(out, "cannot find package") {
+
+		if out, err = execCmd("go", append([]string{"get", "-u", "-v"}, args...)...); err == nil && isFile {
+			out, err = execCmd("go", listArgs...)
 		}
 	}
+
 	if err == nil && isFile {
 		out = filepath.Join(out, filepath.Base(path))
 	}
