@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/OneOfOne/genx"
@@ -70,12 +71,12 @@ Flags:`)
 	}
 	flag.Var(&types, "t", `generic types (ex: -t KV=string -t "KV=interface{}" -t RemoveThisType)`)
 	flag.Var(&selectors, "s", `selectors to remove or rename (ex: -s "cm.HashFn=hashers.Fnv32" -s "x.Call=Something")`)
-	flag.Var(&fields, "fld", `fields to remove from structs (ex: -fld HashFn)`)
-	flag.Var(&funcs, "fn", `funcs to remove (ex: -fn NotNeededFunc)`)
+	flag.Var(&fields, "fld", `fields to remove or rename from structs (ex: -fld HashFn -fld priv=Pub)`)
+	flag.Var(&funcs, "fn", `funcs to remove or rename (ex: -fn NotNeededFunc -fn New=NewStringIface)`)
 	flag.Var(&tags, "tags", `go build tags, used for parsing`)
 	flag.StringVar(&inFile, "f", "", "file to parse")
 	flag.StringVar(&inPkg, "pkg", "", "package to parse")
-	flag.StringVar(&outPath, "o", "", "output dir if parsing a package or output filename if parsing a file")
+	flag.StringVar(&outPath, "o", "/dev/stdin", "output dir if parsing a package or output filename if parsing a file")
 	flag.StringVar(&pkgName, "n", "", "new package name")
 	flag.BoolVar(&mergeFiles, "m", false, "merge all the files in a package into one")
 	flag.StringVar(&getFlags, "getFlags", "", "extra params to pass to go get, build tags are handled automatically.")
@@ -107,23 +108,37 @@ func main() {
 		rewriters["selector:"+key] = val
 	}
 	for i := range fields {
-		key, _ := fields.Split(i)
+		key, val := fields.Split(i)
 		if key == "" {
 			continue
 		}
-		rewriters["field:"+key] = "-"
+		if val == "" {
+			val = "-"
+		}
+		rewriters["field:"+key] = val
 	}
 	for i := range funcs {
-		key, _ := funcs.Split(i)
+		key, val := funcs.Split(i)
 		if key == "" {
 			continue
 		}
-		rewriters["func:"+key] = "-"
+		if val == "" {
+			val = "-"
+		}
+		rewriters["func:"+key] = val
 	}
 
 	log.Printf("%+q", rewriters)
 	g := genx.New(pkgName, rewriters)
 	g.BuildTags = append(g.BuildTags, tags...)
+
+	switch outPath {
+	case "", "-":
+		outPath = "/dev/stdout"
+		fallthrough
+	case "/dev/stdout":
+		mergeFiles = true
+	}
 
 	if inPkg != "" {
 		out, err := execCmd("go", "list", "-f", "{{.Dir}}", inPkg)
@@ -144,24 +159,44 @@ func main() {
 		// if !strings.HasPrefix(inpk, prefix string)
 		pkg, err := g.ParsePkg(inPkg, false)
 		if err != nil {
-			log.Fatalf("error parsing package (%s): %v", inPkg, err)
+			log.Fatalf("error parsing package (%s): %v\n", inPkg, err)
 		}
 
-		switch {
-		case outPath == "", outPath == "-":
-			pf, err := pkg.MergeAll(false)
-			if err != nil {
-				log.Fatalf("error merging files: %v\n%s", err, pf.Src)
-			}
-			fmt.Printf("%s\n", pf.Src)
-		case mergeFiles:
+		if mergeFiles {
 			if err := pkg.WriteAllMerged(outPath, false); err != nil {
 				log.Fatalf("error writing merged package: %v", err)
 			}
-		default:
+		} else {
 			if err := pkg.WritePkg(outPath); err != nil {
 				log.Fatalf("error writing merged package: %v", err)
 			}
+		}
+		return
+	}
+
+	switch inFile {
+	case "", "-":
+	default:
+		out, err := execCmd("go", "list", "-f", "{{.Dir}}", filepath.Dir(inFile))
+		if err != nil && strings.Contains(out, "cannot find package") {
+			args := []string{"get", "-tags", strings.Join(g.BuildTags, " ")}
+			if gf := strings.Split(getFlags, " "); len(gf) > 0 {
+				args = append(args, gf...)
+			}
+			args = append(args, inPkg)
+			log.Printf("executing go %q", args)
+			out, err = execCmd("go", args...)
+		}
+		if err != nil {
+			log.Fatalf("error:\n%s\n", out)
+		}
+		inFile = filepath.Join(out, filepath.Base(inFile))
+		pf, err := g.Parse(inFile, nil)
+		if err != nil {
+			log.Fatalf("error parsing file (%s): %v\n", inFile, err)
+		}
+		if err := pf.WriteFile(outPath); err != nil {
+			log.Fatalf("error writing file: %v", err)
 		}
 	}
 }
