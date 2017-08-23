@@ -84,7 +84,7 @@ Flags:
 ```
 
 
-### Target native types with a fallback: [seeds/sort]((https://github.com/OneOfOne/genx/tree/master/seeds/sort))
+### Target native types with a fallback: [seeds/sort](https://github.com/OneOfOne/genx/tree/master/seeds/sort)
 
 ```
 ➤ genx -seed sort -t KT=string -n main
@@ -97,7 +97,7 @@ func PkgTypeSlice(s []string, less func(i, j int) bool) { ... }
 ...
 ```
 
-### StringSet:  [seeds/set](https://github.com/OneOfOne/genx/tree/master/seeds/set):
+### Sets: [seeds/set](https://github.com/OneOfOne/genx/tree/master/seeds/set)
 ```
 package set
 
