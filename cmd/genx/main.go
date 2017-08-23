@@ -42,7 +42,7 @@ func (sf *sflags) Split(i int) (_, _ string) {
 var (
 	types, fields, selectors, funcs, tags sflags
 
-	inFile, inPkg, outPath string
+	seed, inFile, inPkg, outPath string
 
 	goFlags    string
 	pkgName    string
@@ -83,6 +83,7 @@ Flags:`)
 	flag.Var(&fields, "fld", `fields to remove or rename from structs (ex: -fld HashFn -fld priv=Pub)`)
 	flag.Var(&funcs, "fn", `funcs to remove or rename (ex: -fn NotNeededFunc -fn New=NewStringIface)`)
 	flag.Var(&tags, "tags", `go build tags, used for parsing`)
+	flag.StringVar(&seed, "seed", "", "seed to use")
 	flag.StringVar(&inFile, "f", "", "file to parse")
 	flag.StringVar(&inPkg, "pkg", "", "package to parse")
 	flag.StringVar(&outPath, "o", "/dev/stdin", "output dir if parsing a package or output filename if parsing a file")
@@ -151,6 +152,11 @@ func main() {
 		mergeFiles = true
 	}
 
+	if seed != "" {
+		inPkg = "github.com/OneOfOne/genx/seeds/" + seed
+		mergeFiles = true
+	}
+
 	if inPkg != "" {
 		out, err := goListThenGet(g.BuildTags, inPkg)
 		if err != nil {
@@ -185,7 +191,7 @@ func main() {
 
 		pf, err := g.Parse(out, nil)
 		if err != nil {
-			log.Fatalf("error parsing file (%s): %v\n", inFile, err)
+			log.Fatalf("error parsing file (%s): %v\n%s", inFile, err, pf.Src)
 		}
 		if err := pf.WriteFile(outPath); err != nil {
 			log.Fatalf("error writing file: %v", err)
@@ -203,7 +209,7 @@ func execCmd(c string, args ...string) (string, error) {
 }
 
 func goListThenGet(tags []string, path string) (out string, err error) {
-	if _, err = os.Stat(path); os.IsExist(err) {
+	if _, err = os.Stat(path); err == nil {
 		return path, nil
 	}
 

@@ -21,7 +21,8 @@ import (
 type GenX struct {
 	pkgName   string
 	rewriters map[string]string
-	repl      *strings.Replacer
+	crepl     *strings.Replacer
+	irepl     *strings.Replacer
 	imports   map[string]string
 	// filters   map[reflect.Type]func(n ast.Node) ast.Node
 	// cfg       *struct{}
@@ -35,7 +36,8 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		pkgName:   pkgName,
 		rewriters: map[string]string{},
 		imports:   map[string]string{},
-		repl:      getReplacer(rewriters),
+		crepl:     geireplacer(rewriters, false),
+		irepl:     geireplacer(rewriters, true),
 		BuildTags: []string{"genx"},
 	}
 	for k, v := range rewriters {
@@ -157,7 +159,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 
 	// log.Printf("%T %+v", n, n)
 
-	rewr, repl := g.rewriters, g.repl.Replace
+	rewr := g.rewriters
 
 	switch n := n.(type) {
 	case *ast.File: // handle comments here
@@ -228,6 +230,8 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				break
 			}
 			n.Name = t
+		} else {
+			n.Name = g.irepl.Replace(n.Name)
 		}
 
 	case *ast.Field:
@@ -264,7 +268,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				return deleteNode()
 			}
 		}
-		n.Text = repl(n.Text)
+		n.Text = g.crepl.Replace(n.Text)
 
 	case *ast.KeyValueExpr:
 		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {
@@ -319,12 +323,48 @@ func getIdent(ex ast.Expr) *ast.Ident {
 	}
 }
 
-func getReplacer(m map[string]string) *strings.Replacer {
+var cleanUpName = regexp.MustCompile(`[^\w\d_]+`)
+
+func geireplacer(m map[string]string, ident bool) *strings.Replacer {
 	kv := make([]string, 0, len(m)*2)
 	for k, v := range m {
+		k = k[strings.Index(k, ":")+1:]
+		if ident {
+			v = cleanUpName.ReplaceAllString(strings.Title(v), "")
+
+			if a := builtins[v]; a != "" {
+				v = a
+			} else {
+				v = cleanUpName.ReplaceAllString(v, "")
+			}
+		}
+
 		kv = append(kv, k, v)
 	}
 	return strings.NewReplacer(kv...)
+}
+
+var builtins = map[string]string{
+	"string":      "String",
+	"byte":        "Byte",
+	"[]byte":      "Bytes",
+	"rune":        "Rune",
+	"int":         "Int",
+	"uint":        "Uint",
+	"int8":        "Int8",
+	"uint8":       "Uint8",
+	"int16":       "Int16",
+	"uint16":      "Uint16",
+	"int32":       "Int32",
+	"uint32":      "Uint32",
+	"int64":       "Int64",
+	"uint64":      "Uint64",
+	"float32":     "Float32",
+	"float64":     "Float64",
+	"complex64":   "Cmplx64",
+	"complex128":  "Cmplx128",
+	"interface{}": "Iface",
+	"Interface":   "Iface",
 }
 
 func deleteNode() (ast.Node, bool) { return nil, true }
