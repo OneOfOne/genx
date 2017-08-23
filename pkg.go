@@ -19,6 +19,11 @@ type ParsedFile struct {
 	Name string
 	Src  []byte
 }
+
+func (f ParsedFile) WriteFile(path string) error {
+	return writeFile(path, f.Src)
+}
+
 type ParsedPkg []ParsedFile
 
 func (p ParsedPkg) WritePkg(dir string) error {
@@ -26,7 +31,7 @@ func (p ParsedPkg) WritePkg(dir string) error {
 		return err
 	}
 	for _, f := range p {
-		if err := writeFile(filepath.Join(dir, f.Name), f.Src); err != nil {
+		if err := f.WriteFile(filepath.Join(dir, f.Name)); err != nil {
 			return err
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"log"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -92,7 +93,7 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 		}
 		var pf ParsedFile
 		if pf, err = g.process(fset, name, file); err != nil {
-			// log.Printf("%s", pf.Src)
+			log.Printf("%s", pf.Src)
 			return
 		}
 		out = append(out, pf)
@@ -101,8 +102,13 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 }
 
 func (g *GenX) process(fset *token.FileSet, name string, file *ast.File) (pf ParsedFile, err error) {
-	for ip := range g.imports {
-		astutil.AddImport(fset, file, ip)
+	for imp, name := range g.imports {
+		if name != "" {
+			astutil.AddNamedImport(fset, file, name, imp)
+		} else {
+			astutil.AddImport(fset, file, imp)
+		}
+
 	}
 
 	if g.pkgName != "" && g.pkgName != file.Name.Name {
@@ -157,19 +163,50 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			if !ok {
 				break
 			}
-			if i, _ := n.Type.(*ast.InterfaceType); i != nil && i.Methods != nil && i.Methods.NumFields() == 0 {
+			if nn == "-" || nn == "" {
+				return deleteNode()
+			}
+			if i, _ := n.Type.(*ast.InterfaceType); i != nil {
 				return deleteNode()
 			}
 			t.Name = nn
 		}
 
 	case *ast.FuncDecl:
-		if t := getIdent(n.Name); t != nil && rewr["func:"+t.Name] == "-" {
-			return deleteNode()
+		if t := getIdent(n.Name); t != nil {
+			nn := rewr["func:"+t.Name]
+			if nn == "-" {
+				return deleteNode()
+			} else if nn != "" {
+				t.Name = nn
+				break
+			}
+		}
+		if recv := n.Recv; recv != nil && len(recv.List) == 1 {
+			if t := getIdent(recv.List[0].Type); t != nil && !g.isValidKey("type:"+t.Name) {
+				return deleteNode()
+			}
+		}
+		if params := n.Type.Params; params != nil {
+			for _, p := range params.List {
+				if t := getIdent(p.Type); t != nil && !g.isValidKey("type:"+t.Name) {
+					return deleteNode()
+				}
+			}
+		}
+		if res := n.Type.Results; res != nil {
+			for _, p := range res.List {
+				if t := getIdent(p.Type); t != nil && !g.isValidKey("type:"+t.Name) {
+					return deleteNode()
+				}
+			}
 		}
 
 	case *ast.Ident:
-		if t := rewr["type:"+n.Name]; t != "" {
+		if t, ok := rewr["type:"+n.Name]; ok {
+			if t == "-" {
+				break
+			}
 			n.Name = t
 		}
 
@@ -242,10 +279,14 @@ func (g *GenX) isValidKey(n string) bool {
 }
 
 func getIdent(ex ast.Expr) *ast.Ident {
-	if v, ok := ex.(*ast.Ident); ok {
-		return v
+	switch ex := ex.(type) {
+	case *ast.Ident:
+		return ex
+	case *ast.StarExpr:
+		return getIdent(ex.X)
+	default:
+		return nil
 	}
-	return nil
 }
 
 func getReplacer(m map[string]string) *strings.Replacer {
