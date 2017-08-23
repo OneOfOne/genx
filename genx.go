@@ -40,6 +40,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		irepl:     geireplacer(rewriters, true),
 		BuildTags: []string{"genx"},
 	}
+	allBuiltinTypes := true
 	for k, v := range rewriters {
 		name, pkg, sel := parsePackageWithType(v)
 		if pkg != "" {
@@ -58,15 +59,24 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		} else {
 			switch typ {
 			case "field":
-				g.rewriters["selector:."+kw] = v
+				g.rewriters["selector:."+kw] = sel
+			case "type":
+				allBuiltinTypes = allBuiltinTypes && builtins[sel] != ""
+				g.BuildTags = append(g.BuildTags, "genx_type_"+cleanUpName.ReplaceAllString(sel, ""))
 			}
 
 		}
 
+		if allBuiltinTypes {
+			g.BuildTags = append(g.BuildTags, "genx_builtin")
+		}
+
+		log.Println(g.BuildTags)
+
 		g.rewriters[k] = sel
 	}
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\bnolint\b`))
-	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build genx|go:generate genx`))
+	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build \!?genx.*|go:generate genx`))
 	return g
 }
 
@@ -84,7 +94,7 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 	//fset := token.NewFileSet()
 	ctx := build.Default
 	ctx.BuildTags = append(ctx.BuildTags, g.BuildTags...)
-
+	log.Println(path, ctx.BuildTags)
 	pkg, err := ctx.ImportDir(path, build.IgnoreVendor)
 	if err != nil {
 		return nil, err
@@ -157,8 +167,6 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		return deleteNode()
 	}
 
-	// log.Printf("%T %+v", n, n)
-
 	rewr := g.rewriters
 
 	switch n := n.(type) {
@@ -186,10 +194,10 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				return deleteNode()
 			}
 			switch n.Type.(type) {
-			case *ast.InterfaceType:
+			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
 				return deleteNode()
-			case *ast.SelectorExpr: // support genny
-				return deleteNode()
+			default:
+				// dbg.Dump(n)
 			}
 			t.Name = nn
 		}
