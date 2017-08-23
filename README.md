@@ -13,6 +13,7 @@
 * Automatically passes all code through `x/tools/imports` (aka `goimports`).
 * If you intend on generating files in the same package, you may add `// +build genx` to your template(s).
 * Transparently handles [genny](https://github.com/cheekybits/genny)'s `generic.Type`.
+* Supports few [seeds](https://github.com/OneOfOne/genx/tree/master/seeds/).
 
 ## Usage:
 ```

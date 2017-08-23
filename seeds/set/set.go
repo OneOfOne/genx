@@ -1,30 +1,36 @@
 package set
 
-type KeyType interface{}
+type KT interface{}
 
-type KeyTypeSet map[KeyType]struct{}
+type KTSet map[KT]struct{}
 
-func NewKeyTypeSet() KeyTypeSet { return KeyTypeSet{} }
+func NewKTSet() KTSet { return KTSet{} }
 
-func (s KeyTypeSet) Add(vals ...KeyType) {
+func (s KTSet) Set(vals ...KT) {
 	for i := range vals {
 		s[vals[i]] = struct{}{}
 	}
 }
 
-func (s KeyTypeSet) Has(val KeyType) (ok bool) {
+func (s KTSet) Has(val KT) (ok bool) {
 	_, ok = s[val]
 	return
 }
 
-func (s KeyTypeSet) Delete(vals ...KeyType) {
+func (s KTSet) Unset(vals ...KT) {
 	for i := range vals {
 		delete(s, vals[i])
 	}
 }
 
-func (s KeyTypeSet) Keys() (out []KeyType) {
-	out = make([]KeyType, 0, len(s))
+func (s KTSet) Merge(o KTSet) {
+	for k, v := range o {
+		s[k] = v
+	}
+}
+
+func (s KTSet) Keys() (out []KT) {
+	out = make([]KT, 0, len(s))
 	for k := range s {
 		out = append(out, k)
 	}
