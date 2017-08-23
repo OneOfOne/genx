@@ -39,7 +39,7 @@ func (p ParsedPkg) WritePkg(dir string) error {
 }
 
 // TODO: look into doing this with ast
-var cleanSrc = regexp.MustCompile(`package .*|import ".*|(?s:import \(.*?\)\n)`)
+var cleanSrc = regexp.MustCompile(`(?s:\n\n\n)|//.*?\n\n\n`)
 
 func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 	var totalLen int
@@ -51,8 +51,6 @@ func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 		totalLen += len(f.Src)
 	}
 
-	gotPkg := false
-
 	pf := ParsedFile{
 		Name: "all_gen.go",
 		Src:  make([]byte, 0, totalLen),
@@ -63,11 +61,7 @@ func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 		if (isTest && !tests) || (!isTest && tests) {
 			continue
 		}
-		if gotPkg {
-			f.Src = cleanSrc.ReplaceAll(f.Src, nil)
-		} else {
-			gotPkg = true
-		}
+		f.Src = cleanSrc.ReplaceAll(f.Src, []byte("$1"))
 		pf.Src = append(pf.Src, f.Src...)
 	}
 

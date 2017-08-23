@@ -2,7 +2,9 @@
 
 package genx
 
-type KT interface{}
+import "github.com/cheekybits/genny/generic"
+
+type KT generic.Type
 type VT interface{}
 
 type Both struct {
@@ -14,6 +16,11 @@ type Both struct {
 }
 
 func (b *Both) RemoveMe() {
+	b.K = new(KT)
+	b.V = new(VT)
+}
+
+func (b Both) RemoveMe2() {
 	b.K = new(KT)
 	b.V = new(VT)
 }

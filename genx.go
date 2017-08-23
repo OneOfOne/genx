@@ -39,17 +39,28 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		BuildTags: []string{"genx"},
 	}
 	for k, v := range rewriters {
-		typ, name, pkg, sel := parsePackageWithType(v)
+		name, pkg, sel := parsePackageWithType(v)
 		if pkg != "" {
 			g.imports[pkg] = name
 		}
+
 		if sel == "" {
 			sel = v
 		}
-		switch typ {
-		case "field", "func":
-			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+sel+`\b`))
+
+		idx := strings.Index(k, ":")
+		typ, kw := k[:idx], k[idx+1:]
+
+		if v == "-" {
+			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+kw+`\b`))
+		} else {
+			switch typ {
+			case "field":
+				g.rewriters["selector:."+kw] = v
+			}
+
 		}
+
 		g.rewriters[k] = sel
 	}
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\bnolint\b`))
@@ -64,7 +75,7 @@ func (g *GenX) Parse(fname string, src interface{}) (ParsedFile, error) {
 		return ParsedFile{Name: fname}, err
 	}
 
-	return g.process(fset, fname, file)
+	return g.process(0, fset, fname, file)
 }
 
 func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err error) {
@@ -86,13 +97,13 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 	}
 
 	// TODO: process multiple files in the same time.
-	for _, name := range files {
+	for i, name := range files {
 		var file *ast.File
 		if file, err = parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.ParseComments); err != nil {
 			return
 		}
 		var pf ParsedFile
-		if pf, err = g.process(fset, name, file); err != nil {
+		if pf, err = g.process(i, fset, name, file); err != nil {
 			log.Printf("%s", pf.Src)
 			return
 		}
@@ -101,7 +112,9 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 	return
 }
 
-func (g *GenX) process(fset *token.FileSet, name string, file *ast.File) (pf ParsedFile, err error) {
+var removePkgAndImports = regexp.MustCompile(`package .*|import ".*|(?s:import \(.*?\)\n)`)
+
+func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File) (pf ParsedFile, err error) {
 	for imp, name := range g.imports {
 		if name != "" {
 			astutil.AddNamedImport(fset, file, name, imp)
@@ -121,6 +134,7 @@ func (g *GenX) process(fset *token.FileSet, name string, file *ast.File) (pf Par
 	if err = printer.Fprint(&buf, fset, astrewrite.Walk(file, g.rewrite)); err != nil {
 		return
 	}
+
 	if pf.Src, err = imports.Process(name, buf.Bytes(), &imports.Options{
 		AllErrors: true,
 		Comments:  true,
@@ -128,6 +142,9 @@ func (g *GenX) process(fset *token.FileSet, name string, file *ast.File) (pf Par
 		TabWidth:  4,
 	}); err != nil {
 		pf.Src = buf.Bytes()
+	}
+	if idx > 0 {
+		pf.Src = removePkgAndImports.ReplaceAll(pf.Src, nil)
 	}
 	pf.Name = name
 	return
@@ -166,7 +183,10 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			if nn == "-" || nn == "" {
 				return deleteNode()
 			}
-			if i, _ := n.Type.(*ast.InterfaceType); i != nil {
+			switch n.Type.(type) {
+			case *ast.InterfaceType:
+				return deleteNode()
+			case *ast.SelectorExpr: // support genny
 				return deleteNode()
 			}
 			t.Name = nn
@@ -216,16 +236,22 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				ft.Name = t
 			}
 		}
+
 		if len(n.Names) == 0 {
 			break
 		}
 
 		names := n.Names[:0]
 		for _, n := range n.Names {
-			// TODO: allow renaming fields
-			if g.isValidKey("field:" + n.Name) {
-				names = append(names, n)
+			nn := rewr["field:"+n.Name]
+			if nn == "-" {
+				continue
 			}
+			if nn != "" {
+				n.Name = nn
+			}
+			names = append(names, n)
+
 		}
 		// TODO (BUG):doesn't remove associated comments for some reason.
 		if n.Names = names; len(n.Names) == 0 {
@@ -247,6 +273,10 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 
 	case *ast.SelectorExpr:
 		if x := getIdent(n.X); x != nil && n.Sel != nil {
+			if nv := g.rewriters["selector:."+n.Sel.Name]; nv != "" {
+				n.Sel.Name = nv
+				return n, true
+			}
 			nv := g.rewriters["selector:"+x.Name+"."+n.Sel.Name]
 			if nv == "" {
 				if x.Name == g.pkgName {

@@ -1,24 +1,41 @@
 package genx
 
-import "regexp"
+import (
+	"regexp"
+	"sort"
+)
 
-var pkgWithTypeRE = regexp.MustCompile(`^(\w+):(?:(.*)/([\w\d_-]+)(?:#([\w\d]+))?\.)?([*\w\d]+)$`)
+func (g *GenX) OrderedRewriters() (out []string) {
+	for k, v := range g.rewriters {
+		out = append(out, k+"="+v)
+	}
+	sort.Strings(out)
+	return
+}
 
-func parsePackageWithType(v string) (typ, name, pkg, sel string) {
+var pkgWithTypeRE = regexp.MustCompile(`^(?:(.*)/([\w\d_-]+)(?:#([\w\d]+))?\.)?([*\w\d]+)$`)
+
+func parsePackageWithType(v string) (name, pkg, sel string) {
 	p := pkgWithTypeRE.FindAllStringSubmatch(v, -1)
 	if len(p) != 1 {
 		return
 	}
 
 	parts := p[0]
-	typ, pkg = parts[1], parts[2]+"/"+parts[3]
-	if name = parts[4]; name != "" {
-		parts[3] = name
+	pkg = parts[1] + "/" + parts[2]
+	if name = parts[3]; name != "" {
+		parts[2] = name
 	}
-	if parts[5][0] == '*' {
-		sel = "*" + parts[3] + "." + parts[5][1:]
+	if parts[4][0] == '*' {
+		if parts[2] != "" {
+			sel = "*" + parts[2] + "." + parts[4][1:]
+		} else {
+			sel = "*" + parts[4][1:]
+		}
+	} else if parts[2] != "" {
+		sel = parts[2] + "." + parts[4]
 	} else {
-		sel = parts[3] + "." + parts[5]
+		sel = parts[4]
 	}
 	return
 }
