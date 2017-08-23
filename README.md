@@ -128,6 +128,12 @@ var (
 * Removing types / funcs doesn't always properly remove their comments.
 
 ## FAQ
+
+### Why?
+Mostly learning experience, also I needed it and the other options available didn't do what I wanted.
+
+For Example I needed to remove a field from the struct and change all usage of it for [stringcmap](https://github.com/OneOfOne/cmap/tree/master/stringcmap).
+
 ## TODO
 * Specialized functions (~ `func (t *T) XXIfKTIsString() -> func(t *T) XX()` if KT is string)
 * Documentation.
