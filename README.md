@@ -65,9 +65,9 @@ Flags:
 //go:generate genx -pkg ./internal/cmap -t KT=interface{} -t VT=interface{} -m -o ./cmap.go
 //go:generate genx -pkg ./internal/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
 ```
-* Input: [package](https://github.com/OneOfOne/cmap/tree/9f7d890077bc1925df41083777b5c448d2931a9a/internal/cmap)
-* Merged output: [`map[interface{}]interface{}`](https://github.com/OneOfOne/cmap/blob/9f7d890077bc1925df41083777b5c448d2931a9a/cmap.go)
-* Merged output: [`map[string]interface{}`](https://github.com/OneOfOne/cmap/blob/9f7d890077bc1925df41083777b5c448d2931a9a/stringcmap/cmap.go)
+* Input [cmap](https://github.com/OneOfOne):  [cmap.go](https://github.com/OneOfOne/cmap/blob/3fb721a1b164344c17355d77881bf4acda3d752c/cmap.go) / [lmap.go](https://github.com/OneOfOne/cmap/blob/3fb721a1b164344c17355d77881bf4acda3d752c/lmap.go)
+* Merged output `map[interface{}]interface{}`: [cmap_iface_iface.go](https://github.com/OneOfOne/cmap/blob/3fb721a1b164344c17355d77881bf4acda3d752c/cmap_iface_iface.go)
+* Merged output `map[string]interface{}`: [stringcmap/cmap_string_iface.go](https://github.com/OneOfOne/cmap/blob/3fb721a1b164344c17355d77881bf4acda3d752c/stringcmap/cmap_string_iface.go)
 
 ## TODO
 * Specialized functions (~ `func (t *T) XXIfKTIsString() -> func(t *T) XX()` if KT is string)
