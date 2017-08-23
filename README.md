@@ -40,27 +40,29 @@ Examples:
   -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
 
 Flags:
-  -f string
+  -f file
     	file to parse
-  -fld value
-    	fields to remove or rename from structs (ex: -fld HashFn -fld priv=Pub)
+  -fld field
+    	struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
   -fn value
-    	funcs to remove or rename (ex: -fn NotNeededFunc -fn New=NewStringIface)
-  -goFlags string
-    	extra params to pass to go, build tags are handled automatically.
+    	func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
+  -goFlags flags
+    	extra go get flags (ex: -goFlags '-t -race')
   -m	merge all the files in a package into one
-  -n string
-    	new package name
+  -n package name
+    	package name sets the output package name, uses input package name if empty.
   -o string
     	output dir if parsing a package or output filename if parsing a file (default "/dev/stdin")
-  -pkg string
+  -pkg package
     	package to parse
-  -s value
-    	selectors to remove or rename (ex: -s "cm.HashFn=hashers.Fnv32" -s "x.Call=Something")
-  -t value
-    	generic types (ex: -t KV=string -t "KV=interface{}" -t RemoveThisType)
-  -tags value
-    	go build tags, used for parsing
+  -s selector spec
+    	selector specs to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
+  -seed <seed>
+    	alias for -m -pkg github.com/OneOfOne/seeds/<seed>
+  -t type spec
+    	generic type specs to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
+  -tags tags
+    	go build tags, used for parsing and automatically passed to go get.
   -v	verbose
 ```
 
