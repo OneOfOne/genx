@@ -65,7 +65,7 @@ Flags:
 ```
 
 ## Examples:
-### Package
+### Package:
 
 ```
 //go:generate genx -pkg ./internal/cmap -t KT=interface{} -t VT=interface{} -m -o ./cmap.go
@@ -75,14 +75,14 @@ Flags:
 * Merged output `map[interface{}]interface{}`: [cmap_iface_iface.go](https://github.com/OneOfOne/cmap/blob/master/cmap_iface_iface.go)
 * Merged output `map[string]interface{}`: [stringcmap/cmap_string_iface.go](https://github.com/OneOfOne/cmap/blob/master/stringcmap/cmap_string_iface.go)
 
-### Single File
+### Single File:
 ```bash
 ➤ genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -v -o ./lmap_string_int.go
 ```
 
-### set:
+### StringSet:
 
-* Input (seeds/set)[https://github.com/OneOfOne/genx/tree/master/seeds/set):
+* Input [seeds/set](https://github.com/OneOfOne/genx/tree/master/seeds/set):
 ```
 package set
 
