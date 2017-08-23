@@ -25,10 +25,11 @@ type GenX struct {
 	// filters   map[reflect.Type]func(n ast.Node) ast.Node
 	// cfg       *struct{}
 
-	BuildTags []string
+	BuildTags      []string
+	CommentFilters []*regexp.Regexp
 }
 
-var pkgWithTypeRE = regexp.MustCompile(`^(?:(.*)/([\w\d]+)\.)?([*\w\d]+)$`)
+var pkgWithTypeRE = regexp.MustCompile(`^type:(?:(.*)/([\w\d]+)\.)?([*\w\d]+)$`)
 
 func New(pkgName string, rewriters map[string]string) *GenX {
 	g := &GenX{
@@ -48,7 +49,12 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 			}
 			g.imports[parts[1]+"/"+parts[2]] = struct{}{}
 		}
-
+		if strings.HasPrefix(k, "field:") {
+			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+k[6:]+`\b`))
+		}
+		if strings.HasPrefix(k, "func:") {
+			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+k[5:]+`\b`))
+		}
 		g.rewriters[k] = v
 	}
 	return g
@@ -168,11 +174,15 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 		// TODO (BUG):doesn't remove associated comments for some reason.
 		if n.Names = names; len(n.Names) == 0 {
-			n.Doc, n.Comment = nil, nil
 			return deleteNode()
 		}
 
 	case *ast.Comment:
+		for _, f := range g.CommentFilters {
+			if f.MatchString(n.Text) {
+				return deleteNode()
+			}
+		}
 		n.Text = repl(n.Text)
 
 	case *ast.KeyValueExpr:

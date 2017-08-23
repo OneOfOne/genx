@@ -49,8 +49,8 @@ func init() {
 	}
 	flag.Var(&types, "t", `generic types (ex: -t KV=string -t "KV=interface{}" -t RemoveThisType)`)
 	flag.Var(&selectors, "s", `selectors to remove or rename (ex: -s "cm.HashFn=hashers.Fnv32" -s "x.Call=Something")`)
-	flag.Var(&fields, "rm-field", `fields to remove from structs (ex: -rm-field HashFn)`)
-	flag.Var(&funcs, "rm-func", `funcs to remove (ex: -rm-func NotNeededFunc)`)
+	flag.Var(&fields, "fld", `fields to remove from structs (ex: -fld HashFn)`)
+	flag.Var(&funcs, "fn", `funcs to remove (ex: -fn NotNeededFunc)`)
 	flag.Var(&tags, "tags", `go build tags, used for parsing`)
 	flag.StringVar(&inFile, "f", "", "file to parse")
 	flag.StringVar(&inPkg, "pkg", "", "package to parse")
@@ -100,7 +100,6 @@ func main() {
 	}
 
 	log.Printf("%+q", rewriters)
-
 	g := genx.New(pkgName, rewriters)
 	g.BuildTags = []string(tags)
 
