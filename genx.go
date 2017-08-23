@@ -21,7 +21,7 @@ type GenX struct {
 	pkgName   string
 	rewriters map[string]string
 	repl      *strings.Replacer
-	imports   map[string]struct{}
+	imports   map[string]string
 	// filters   map[reflect.Type]func(n ast.Node) ast.Node
 	// cfg       *struct{}
 
@@ -29,33 +29,27 @@ type GenX struct {
 	CommentFilters []*regexp.Regexp
 }
 
-var pkgWithTypeRE = regexp.MustCompile(`^type:(?:(.*)/([\w\d]+)\.)?([*\w\d]+)$`)
-
 func New(pkgName string, rewriters map[string]string) *GenX {
 	g := &GenX{
 		pkgName:   pkgName,
 		rewriters: map[string]string{},
-		imports:   map[string]struct{}{},
+		imports:   map[string]string{},
 		repl:      getReplacer(rewriters),
+		BuildTags: []string{"genx"},
 	}
 	for k, v := range rewriters {
-		parts := pkgWithTypeRE.FindAllStringSubmatch(v, -1)
-		if len(parts) == 1 {
-			parts := parts[0]
-			if parts[3][0] == '*' {
-				v = "*" + parts[2] + "." + parts[3][1:]
-			} else if parts[2] != "" {
-				v = parts[2] + "." + parts[3]
-			}
-			g.imports[parts[1]+"/"+parts[2]] = struct{}{}
+		typ, name, pkg, sel := parsePackageWithType(v)
+		if pkg != "" {
+			g.imports[pkg] = name
 		}
-		if strings.HasPrefix(k, "field:") {
-			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+k[6:]+`\b`))
+		if sel == "" {
+			sel = v
 		}
-		if strings.HasPrefix(k, "func:") {
-			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+k[5:]+`\b`))
+		switch typ {
+		case "field", "func":
+			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+sel+`\b`))
 		}
-		g.rewriters[k] = v
+		g.rewriters[k] = sel
 	}
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\bnolint\b`))
 	return g
@@ -74,7 +68,6 @@ func (g *GenX) Parse(fname string, src interface{}) (ParsedFile, error) {
 func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err error) {
 	//fset := token.NewFileSet()
 	ctx := build.Default
-	ctx.BuildTags = append(ctx.BuildTags, "genx") // allow packages to include/exclude files based on our tags
 	ctx.BuildTags = append(ctx.BuildTags, g.BuildTags...)
 
 	pkg, err := ctx.ImportDir(path, build.IgnoreVendor)
@@ -89,7 +82,7 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 	if includeTests {
 		files = append(files, pkg.TestGoFiles...)
 	}
-
+	// TODO: process multiple files in the same time.
 	for _, name := range files {
 		var file *ast.File
 		if file, err = parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.ParseComments); err != nil {
@@ -142,8 +135,15 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 
 	switch n := n.(type) {
 	case *ast.TypeSpec:
-		if t := getIdent(n.Name); t != nil && rewr["type:"+t.Name] != "" {
-			return deleteNode()
+		if t := getIdent(n.Name); t != nil {
+			nn, ok := rewr["type:"+t.Name]
+			if !ok {
+				break
+			}
+			if i, _ := n.Type.(*ast.InterfaceType); i != nil && i.Methods != nil && i.Methods.NumFields() == 0 {
+				return deleteNode()
+			}
+			t.Name = nn
 		}
 
 	case *ast.FuncDecl:

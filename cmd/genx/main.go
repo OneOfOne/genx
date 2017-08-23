@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/OneOfOne/genx"
@@ -37,6 +39,7 @@ var (
 
 	inFile, inPkg, outPath string
 
+	getFlags   string
 	pkgName    string
 	mergeFiles bool
 )
@@ -44,8 +47,26 @@ var (
 func init() {
 	log.SetFlags(log.Lshortfile)
 	flag.Usage = func() {
-		log.Println(`genx -pkg ../cmap/internal/cmap/ -n stringcmap -t KT=string -t "VT=interface{}" -rm-field HashFn \
-	-s "cm.HashFn=hashers.Fnv32" -s "cmap.DefaultShardCount=DefaultShardCount" -m`)
+		fmt.Fprintln(os.Stderr, `usage: genx [-t T=type] [-s xx.xx=[yy.]yy] [-fld struct-field-to-remove] [-fn func-to-remove] [-tags "go build tags"]
+  [-m] [-n package-name] [-pkg input package] [-f input file] [-o output file or dir]
+
+Types:
+  The -t flag supports full package paths or short ones and letting goimports handle it.
+  -t "KV=string
+  -t "M=*cmap.CMap"
+  -t "M=github.com/OneOfOne/cmap.*CMap"
+  -s "cm.HashFn=github.com/OneOfOne/cmap/bad_pkg_name#hashers.Fnv32"
+  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers.Fnv32"
+  -s "cm.HashFn=hashers.Fnv32"
+
+Examples:
+  genx -pkg github.com/OneOfOne/cmap/internal/cmap -t KT=interface{} -t VT=interface{} -m -n cmap -o ./cmap.go
+
+  genx -pkg github.com/OneOfOne/cmap/internal/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn \
+  -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
+
+Flags:`)
+		flag.PrintDefaults()
 	}
 	flag.Var(&types, "t", `generic types (ex: -t KV=string -t "KV=interface{}" -t RemoveThisType)`)
 	flag.Var(&selectors, "s", `selectors to remove or rename (ex: -s "cm.HashFn=hashers.Fnv32" -s "x.Call=Something")`)
@@ -57,6 +78,7 @@ func init() {
 	flag.StringVar(&outPath, "o", "", "output dir if parsing a package or output filename if parsing a file")
 	flag.StringVar(&pkgName, "n", "", "new package name")
 	flag.BoolVar(&mergeFiles, "m", false, "merge all the files in a package into one")
+	flag.StringVar(&getFlags, "getFlags", "", "extra params to pass to go get, build tags are handled automatically.")
 
 	flag.Parse()
 }
@@ -101,9 +123,25 @@ func main() {
 
 	log.Printf("%+q", rewriters)
 	g := genx.New(pkgName, rewriters)
-	g.BuildTags = []string(tags)
+	g.BuildTags = append(g.BuildTags, tags...)
 
 	if inPkg != "" {
+		out, err := execCmd("go", "list", "-f", "{{.Dir}}", inPkg)
+		if err != nil && strings.Contains(out, "cannot find package") {
+			args := []string{"get", "-tags", strings.Join(g.BuildTags, " ")}
+			if gf := strings.Split(getFlags, " "); len(gf) > 0 {
+				args = append(args, gf...)
+			}
+			args = append(args, inPkg)
+			log.Printf("executing go %q", args)
+			out, err = execCmd("go", args...)
+		}
+
+		if err != nil {
+			log.Fatalf("error:\n%s\n", out)
+		}
+		inPkg = out
+		// if !strings.HasPrefix(inpk, prefix string)
 		pkg, err := g.ParsePkg(inPkg, false)
 		if err != nil {
 			log.Fatalf("error parsing package (%s): %v", inPkg, err)
@@ -126,6 +164,12 @@ func main() {
 			}
 		}
 	}
+}
+
+func execCmd(c string, args ...string) (string, error) {
+	cmd := exec.Command(c, args...)
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
 }
 
 /*
