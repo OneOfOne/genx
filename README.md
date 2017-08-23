@@ -5,12 +5,13 @@
 	go get github.com/OneOfOne/genx/...
 
 ## Features
-* Can be easily used with `go generate`, from the command line or as a library.
-* Uses local files, packages, and automatically uses `go get`.
+* It can be *easily* used with `go generate`, from the command line or as a library.
+* Uses local files, packages, and automatically uses `go get` if the remote package doesn't exist.
 * You can rewrite, remove and change pretty much everything.
 * Allows you to merge a package of multiple files into a single one.
 * *Safely* remove functions and struct fields.
 * Automatically passes all code through `x/tools/imports` (aka `goimports`).
+* If you intend on generating files in the same package, you may add `// +build genx` to your template(s).
 
 ## Usage:
 ```
@@ -74,6 +75,7 @@ Flags:
 * Add proper examples.
 * Support package tests.
 * Handle removing comments properly rather than using regexp.
+* Support removing structs and their methods.
 
 ## Credits
 * The excellent [astrewrite](https://github.com/fatih/astrewrite) library by [Fatih](https://github.com/fatih).

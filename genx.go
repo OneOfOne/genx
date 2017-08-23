@@ -52,6 +52,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		g.rewriters[k] = sel
 	}
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\bnolint\b`))
+	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build genx|go:generate genx`))
 	return g
 }
 
@@ -82,6 +83,7 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 	if includeTests {
 		files = append(files, pkg.TestGoFiles...)
 	}
+
 	// TODO: process multiple files in the same time.
 	for _, name := range files {
 		var file *ast.File
@@ -90,6 +92,7 @@ func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err erro
 		}
 		var pf ParsedFile
 		if pf, err = g.process(fset, name, file); err != nil {
+			// log.Printf("%s", pf.Src)
 			return
 		}
 		out = append(out, pf)
@@ -134,6 +137,20 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 	rewr, repl := g.rewriters, g.repl.Replace
 
 	switch n := n.(type) {
+	case *ast.File: // handle comments here
+		comments := n.Comments[:0]
+	L:
+		for _, cg := range n.Comments {
+			txt := cg.Text()
+			for _, f := range g.CommentFilters {
+				if f.MatchString(txt) {
+					continue L
+				}
+			}
+			comments = append(comments, cg)
+		}
+		n.Comments = comments
+
 	case *ast.TypeSpec:
 		if t := getIdent(n.Name); t != nil {
 			nn, ok := rewr["type:"+t.Name]
