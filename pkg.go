@@ -56,13 +56,17 @@ func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 		Src:  make([]byte, 0, totalLen),
 	}
 
-	for _, f := range p {
+	for i, f := range p {
 		isTest := strings.HasSuffix(f.Name, "_test.go")
 		if (isTest && !tests) || (!isTest && tests) {
 			continue
 		}
 		f.Src = cleanSrc.ReplaceAll(f.Src, []byte("$1"))
+		if i > 0 {
+			f.Src = removePkgAndImports.ReplaceAll(f.Src, nil)
+		}
 		pf.Src = append(pf.Src, f.Src...)
+
 	}
 
 	// log.Printf("%s", out)
