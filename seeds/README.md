@@ -11,7 +11,7 @@
 ## Available Seeds
 
 ### **[set](https://github.com/OneOfOne/genx/tree/master/seeds/set)**
-* Very simple `set` with `Set/Unset/Has/Merge/Keys()` support.
+* A very simple `set` with `Set/Unset/Has/Merge/Keys()` support.
 
 ### **[atomicMap](https://github.com/OneOfOne/genx/tree/master/seeds/atomicMap)**
 * A modified version of [sync.Map](https://tip.golang.org/pkg/sync/#Map) to support code gen.
@@ -19,8 +19,8 @@
 
 ### **[sort](https://github.com/OneOfOne/genx/tree/master/seeds/sort)**
 * Shows how to target native types vs other types with tags.
-* For types with native `< (less than)` support (string, int, float*), it uses [builtin-types.go](https://github.com/OneOfOne/genx/tree/master/seeds/sort/builtin-types.go).
-* For other types, it expects a `func(i, j int) bool` func.
+* For builtin types, it uses [builtin-types.go](https://github.com/OneOfOne/genx/tree/master/seeds/sort/builtin-types.go).
+* For other types, it expects a `func(i, j int) bool` func, and uses [other-types.go](https://github.com/OneOfOne/genx/tree/master/seeds/sort/other-types.go).
 * A modified version of [sort.Slice/sort.SliceStable](https://tip.golang.org/pkg/sort/#Slice) to support code gen.
 * The code generated from this seed is under The Go BSD-style [license](https://github.com/OneOfOne/genx/tree/master/seeds/atomicMap/LICENSE).
 
