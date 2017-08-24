@@ -89,7 +89,6 @@ Flags:`)
 	flag.StringVar(&outPath, "o", "/dev/stdin", "output dir if parsing a package or output filename if parsing a file")
 	flag.StringVar(&pkgName, "n", "", "`package name` sets the output package name, uses input package name if empty.")
 	flag.StringVar(&goFlags, "goFlags", "", "extra go get `flags` (ex: -goFlags '-t -race')")
-	flag.BoolVar(&mergeFiles, "m", false, "merge all the files in a package into one")
 	flag.BoolVar(&verbose, "v", false, "verbose")
 
 	flag.Parse()
@@ -153,9 +152,7 @@ func main() {
 	}
 
 	// auto merge files if the output is a file not a dir.
-	if !mergeFiles && filepath.Ext(outPath) == ".go" {
-		mergeFiles = true
-	}
+	mergeFiles = !mergeFiles && filepath.Ext(outPath) == ".go"
 
 	if seed != "" {
 		inPkg = "github.com/OneOfOne/genx/seeds/" + seed

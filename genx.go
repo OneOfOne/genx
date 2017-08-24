@@ -11,6 +11,7 @@ import (
 	"log"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -80,6 +81,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 	}
 
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build \!?genx.*|go:generate genx`))
+	sort.Strings(g.zero_types)
 	return g
 }
 
@@ -318,7 +320,11 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 	case *ast.ReturnStmt:
 		for i, r := range n.Results {
 			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
-				rt.Name = "zero_" + cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
+				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
+				if indexOf(g.zero_types, crt) > -1 {
+					log.Println(g.zero_types)
+					rt.Name = "zero_" + cleanUpName.ReplaceAllString(crt, "")
+				}
 			}
 		}
 	}
@@ -326,6 +332,14 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 	return n, true
 }
 
+func indexOf(ss []string, v string) int {
+	for i, s := range ss {
+		if s == v {
+			return i
+		}
+	}
+	return -1
+}
 func (g *GenX) isValidKey(n string) bool {
 	v, ok := g.rewriters[n]
 	if !ok {
