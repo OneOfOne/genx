@@ -27,7 +27,7 @@ type (
 // comparable or worse performance and worse type safety than an ordinary
 // map paired with a read-write mutex.
 //
-// The zero MapKTVT is valid and empty.
+// The nil MapKTVT is valid and empty.
 //
 // A MapKTVT must not be copied after first use.
 type MapKTVT struct {
@@ -74,7 +74,6 @@ type readOnly struct {
 // expungedVT is an arbitrary pointer that marks entries which have been deleted
 // from the dirty map.
 var expungedVT = unsafe.Pointer(new(VT))
-var zero VT
 
 // An entry is a slot in the map corresponding to a particular key.
 type entry struct {
@@ -126,7 +125,7 @@ func (m *MapKTVT) Load(key KT) (value VT, ok bool) {
 		m.mu.Unlock()
 	}
 	if !ok {
-		return zero, false
+		return nil, false
 	}
 	return e.load()
 }
@@ -134,7 +133,7 @@ func (m *MapKTVT) Load(key KT) (value VT, ok bool) {
 func (e *entry) load() (value VT, ok bool) {
 	p := atomic.LoadPointer(&e.p)
 	if p == nil || p == expungedVT {
-		return zero, false
+		return nil, false
 	}
 	return *(*VT)(p), true
 }
@@ -250,7 +249,7 @@ func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 func (e *entry) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
 	p := atomic.LoadPointer(&e.p)
 	if p == expungedVT {
-		return zero, false, false
+		return nil, false, false
 	}
 	if p != nil {
 		return *(*VT)(p), true, true
@@ -266,7 +265,7 @@ func (e *entry) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
 		}
 		p = atomic.LoadPointer(&e.p)
 		if p == expungedVT {
-			return zero, false, false
+			return nil, false, false
 		}
 		if p != nil {
 			return *(*VT)(p), true, true

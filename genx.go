@@ -2,6 +2,7 @@ package genx
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -19,11 +20,14 @@ import (
 )
 
 type GenX struct {
-	pkgName   string
-	rewriters map[string]string
-	crepl     *strings.Replacer
-	irepl     *strings.Replacer
-	imports   map[string]string
+	pkgName        string
+	rewriters      map[string]string
+	crepl          *strings.Replacer
+	irepl          *strings.Replacer
+	imports        map[string]string
+	zero_types     []string
+	curReturnTypes []string
+	visited        map[ast.Node]bool
 	// filters   map[reflect.Type]func(n ast.Node) ast.Node
 	// cfg       *struct{}
 
@@ -36,6 +40,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		pkgName:   pkgName,
 		rewriters: map[string]string{},
 		imports:   map[string]string{},
+		visited:   map[ast.Node]bool{},
 		crepl:     geireplacer(rewriters, false),
 		irepl:     geireplacer(rewriters, true),
 		BuildTags: []string{"genx"},
@@ -62,11 +67,12 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 				g.rewriters["selector:."+kw] = sel
 			case "type":
 				csel := cleanUpName.ReplaceAllString(sel, "")
-
+				kw = cleanUpName.ReplaceAllString(kw, "")
 				if isBuiltin := csel != "interface" && builtins[csel] != ""; isBuiltin {
 					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
+				g.zero_types = append(g.zero_types, sel)
 			}
 		}
 
@@ -147,6 +153,12 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 		return
 	}
 
+	if idx == 0 && len(g.zero_types) > 0 {
+		buf.WriteByte('\n')
+		for _, t := range g.zero_types {
+			fmt.Fprintf(&buf, "var zero_%s %s\n", cleanUpName.ReplaceAllString(t, ""), t)
+		}
+	}
 	if pf.Src, err = imports.Process(name, buf.Bytes(), &imports.Options{
 		AllErrors: true,
 		Comments:  true,
@@ -155,9 +167,7 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 	}); err != nil {
 		pf.Src = buf.Bytes()
 	}
-	if idx > 0 {
-		pf.Src = removePkgAndImports.ReplaceAll(pf.Src, nil)
-	}
+
 	pf.Name = name
 	return
 }
@@ -166,9 +176,12 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 	if n == nil {
 		return deleteNode()
 	}
-
+	if g.visited[n] {
+		return n, true
+	}
+	g.visited[n] = true
 	rewr := g.rewriters
-
+	//
 	switch n := n.(type) {
 	case *ast.File: // handle comments here
 		comments := n.Comments[:0]
@@ -197,7 +210,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
 				return deleteNode()
 			default:
-				// dbg.Dump(n)
+				//
 			}
 			t.Name = nn
 		}
@@ -217,19 +230,9 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				return deleteNode()
 			}
 		}
-		if params := n.Type.Params; params != nil {
-			for _, p := range params.List {
-				if t := getIdent(p.Type); t != nil && !g.isValidKey("type:"+t.Name) {
-					return deleteNode()
-				}
-			}
-		}
-		if res := n.Type.Results; res != nil {
-			for _, p := range res.List {
-				if t := getIdent(p.Type); t != nil && !g.isValidKey("type:"+t.Name) {
-					return deleteNode()
-				}
-			}
+
+		if n.Type, _ = g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); n.Type == nil {
+			return deleteNode()
 		}
 
 	case *ast.Ident:
@@ -243,11 +246,8 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 
 	case *ast.Field:
-		if ft := getIdent(n.Type); ft != nil {
-			if t := rewr[ft.Name]; t != "" {
-				ft.Name = t
-			}
-		}
+		//
+		n.Type = g.rewriteExprTypes("type:", n.Type)
 
 		if len(n.Names) == 0 {
 			break
@@ -307,6 +307,20 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				return x, true
 			}
 		}
+	case *ast.InterfaceType:
+		if n.Methods != nil && len(n.Methods.List) == 0 {
+			if nt := g.rewriters["type:interface{}"]; nt != "" {
+				return &ast.Ident{
+					Name: nt,
+				}, true
+			}
+		}
+	case *ast.ReturnStmt:
+		for i, r := range n.Results {
+			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
+				rt.Name = "zero_" + cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
+			}
+		}
 	}
 
 	return n, true
@@ -318,6 +332,75 @@ func (g *GenX) isValidKey(n string) bool {
 		return true
 	}
 	return v != "-" && v != ""
+}
+
+func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
+	if g.visited[ex] {
+		return ex
+	}
+	g.visited[ex] = true
+
+	switch t := ex.(type) {
+	case *ast.InterfaceType:
+		if nt := g.rewriters[prefix+"interface{}"]; nt != "" {
+			if nt == "-" {
+				return nil
+			}
+			ex = &ast.Ident{
+				Name: nt,
+			}
+		}
+	case *ast.Ident:
+		if nt := g.rewriters[prefix+t.Name]; nt != "" {
+			if nt == "-" {
+				return nil
+			}
+			t.Name = nt
+		}
+	case *ast.StarExpr:
+		if t.X = g.rewriteExprTypes(prefix, t.X); t.X == nil {
+			return nil
+		}
+	case *ast.Ellipsis:
+		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
+			return nil
+		}
+	case *ast.ArrayType:
+		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
+			return nil
+		}
+	case *ast.MapType:
+		if t.Key = g.rewriteExprTypes(prefix, t.Key); t.Key == nil {
+			return nil
+		}
+		if t.Value = g.rewriteExprTypes(prefix, t.Value); t.Value == nil {
+			return nil
+		}
+	case *ast.FuncType:
+		if t.Params != nil {
+			lst := t.Params.List
+			for i, p := range lst {
+				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
+					return nil
+				}
+				lst[i] = p
+			}
+		}
+		if t.Results != nil {
+			lst := t.Results.List
+			g.curReturnTypes = g.curReturnTypes[:0]
+			for i, p := range lst {
+				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
+					return nil
+				}
+				if rt := getIdent(p.Type); rt != nil {
+					g.curReturnTypes = append(g.curReturnTypes, rt.Name)
+				}
+				lst[i] = p
+			}
+		}
+	}
+	return ex
 }
 
 func getIdent(ex ast.Expr) *ast.Ident {

@@ -42,3 +42,7 @@ var (
 	vtS  []VT
 	s    []Both
 )
+
+func XXX(vs ...interface{}) interface{} {
+	return vs[0]
+}
