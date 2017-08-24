@@ -41,8 +41,6 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		BuildTags: []string{"genx"},
 	}
 
-	allBuiltinTypes := true
-
 	for k, v := range rewriters {
 		name, pkg, sel := parsePackageWithType(v)
 		if pkg != "" {
@@ -64,21 +62,15 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 				g.rewriters["selector:."+kw] = sel
 			case "type":
 				csel := cleanUpName.ReplaceAllString(sel, "")
-				isBuiltin := csel != "interface" && builtins[csel] != ""
-				allBuiltinTypes = allBuiltinTypes && isBuiltin
-				if isBuiltin {
+
+				if isBuiltin := csel != "interface" && builtins[csel] != ""; isBuiltin {
 					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
 			}
-
 		}
 
 		g.rewriters[k] = sel
-	}
-
-	if allBuiltinTypes {
-		g.BuildTags = append(g.BuildTags, "genx_builtin")
 	}
 
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build \!?genx.*|go:generate genx`))

@@ -13,59 +13,8 @@
 * Automatically passes all code through `x/tools/imports` (aka `goimports`).
 * If you intend on generating files in the same package, you may add `// +build genx` to your template(s).
 * Transparently handles [genny](https://github.com/cheekybits/genny)'s `generic.Type`.
-* Supports few [seeds](https://github.com/OneOfOne/genx/tree/master/seeds/).
-
-## Usage:
-```
-➤ genx -h
-usage: genx [-t T=type] [-s xx.xx=[yy.]yy] [-fld struct-field-to-remove] [-fn func-to-remove] [-tags "go build tags"]
-  [-m] [-n package-name] [-pkg input package] [-f input file] [-o output file or dir]
-
-Types:
-  The -t/-s flags supports full package paths or short ones and letting goimports handle it.
-  -t "KV=string
-  -t "M=*cmap.CMap"
-  -t "M=github.com/OneOfOne/cmap.*CMap"
-  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers#H.Fnv32"
-  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers.Fnv32"
-  -s "cm.HashFn=hashers.Fnv32"
-  -t "RemoveThisType"
-  -fld "RemoveThisStructField,OtherField=NewFieldName"
-  -fn "RemoveThisFunc,OtherFunc=NewFuncName"
-
-Examples:
-  genx -pkg github.com/OneOfOne/cmap -t "KT=interface{},VT=interface{}" -m -n cmap -o ./cmap.go
-  genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -o ./lmap_string_int.go
-
-  genx -pkg github.com/OneOfOne/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn \
-  -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
-
-Flags:
-  -f file
-    	file to parse
-  -fld field
-    	struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
-  -fn value
-    	func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
-  -goFlags flags
-    	extra go get flags (ex: -goFlags '-t -race')
-  -m	merge all the files in a package into one
-  -n package name
-    	package name sets the output package name, uses input package name if empty.
-  -o string
-    	output dir if parsing a package or output filename if parsing a file (default "/dev/stdin")
-  -pkg package
-    	package to parse
-  -s selector spec
-    	selector specs to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
-  -seed <seed>
-    	alias for -m -pkg github.com/OneOfOne/seeds/<seed>
-  -t type spec
-    	generic type specs to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
-  -tags tags
-    	go build tags, used for parsing and automatically passed to go get.
-  -v	verbose
-```
+* Supports a few [seeds](https://github.com/OneOfOne/genx/tree/master/seeds/).
+* Adds build tags based on the types you pass, so you can target specifc types (ex: `// +build genx_kt_string` or `// +build genx_vt_builtin` )
 
 ## Examples:
 ### Package:
@@ -160,26 +109,79 @@ func (s StringSet) Delete(vals ...string) {
 	}
 }
 ```
-## BUGS
-* Removing types / funcs doesn't always properly remove their comments.
-
-## FAQ
-
-### Why?
-Mostly learning experience, also I needed it and the other options available didn't do what I wanted.
-
-For Example I needed to remove a field from the struct and change all usage of it for [stringcmap](https://github.com/OneOfOne/cmap/tree/master/stringcmap).
-
 ## TODO
 * Documentation.
 * Add proper examples.
 * Support package tests.
 * Handle removing comments properly rather than using regexp.
 * Common seeds.
+* ~~Support specalized functions by type.~~
 * ~~Support removing structs and their methods.~~
 
 ## Credits
 * The excellent [astrewrite](https://github.com/fatih/astrewrite) library by [Fatih](https://github.com/fatih).
+
+## BUGS
+* Removing types / funcs doesn't always properly remove their comments.
+
+## FAQ
+
+### Why?
+Mostly a learning experience, also I needed it and the other options available didn't do what I needed.
+
+For Example I needed to remove a field from the struct and change all usage of it for [stringcmap](https://github.com/OneOfOne/cmap/tree/master/stringcmap).
+
+## Usage:
+```
+➤ genx -h
+usage: genx [-t T=type] [-s xx.xx=[yy.]yy] [-fld struct-field-to-remove] [-fn func-to-remove] [-tags "go build tags"]
+  [-m] [-n package-name] [-pkg input package] [-f input file] [-o output file or dir]
+
+Types:
+  The -t/-s flags supports full package paths or short ones and letting goimports handle it.
+  -t "KV=string
+  -t "M=*cmap.CMap"
+  -t "M=github.com/OneOfOne/cmap.*CMap"
+  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers#H.Fnv32"
+  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers.Fnv32"
+  -s "cm.HashFn=hashers.Fnv32"
+  -t "RemoveThisType"
+  -fld "RemoveThisStructField,OtherField=NewFieldName"
+  -fn "RemoveThisFunc,OtherFunc=NewFuncName"
+
+Examples:
+  genx -pkg github.com/OneOfOne/cmap -t "KT=interface{},VT=interface{}" -m -n cmap -o ./cmap.go
+  genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -o ./lmap_string_int.go
+
+  genx -pkg github.com/OneOfOne/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn \
+  -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
+
+Flags:
+  -f file
+    	file to parse
+  -fld field
+    	struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
+  -fn value
+    	func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
+  -goFlags flags
+    	extra go get flags (ex: -goFlags '-t -race')
+  -m	merge all the files in a package into one
+  -n package name
+    	package name sets the output package name, uses input package name if empty.
+  -o string
+    	output dir if parsing a package or output filename if parsing a file (default "/dev/stdin")
+  -pkg package
+    	package to parse
+  -s selector spec
+    	selector specs to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
+  -seed <seed>
+    	alias for -m -pkg github.com/OneOfOne/seeds/<seed>
+  -t type spec
+    	generic type specs to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
+  -tags tags
+    	go build tags, used for parsing and automatically passed to go get.
+  -v	verbose
+```
 
 ## Contributions
 * All contributions are welcome, just open a pull request.
