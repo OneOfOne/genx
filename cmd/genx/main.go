@@ -147,10 +147,13 @@ func main() {
 	}
 
 	switch outPath {
-	case "", "-":
+	case "", "-", "/dev/stdout":
 		outPath = "/dev/stdout"
-		fallthrough
-	case "/dev/stdout":
+		mergeFiles = true
+	}
+
+	// auto merge files if the output is a file not a dir.
+	if !mergeFiles && filepath.Ext(outPath) == ".go" {
 		mergeFiles = true
 	}
 

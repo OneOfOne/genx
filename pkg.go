@@ -2,6 +2,7 @@ package genx
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -87,7 +88,7 @@ func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 func (p ParsedPkg) WriteAllMerged(fname string, tests bool) error {
 	pf, err := p.MergeAll(tests)
 	if err != nil {
-		fmt.Printf("%s", pf.Src)
+		log.Printf("partial output:\n%s", pf.Src)
 		return err
 	}
 	return writeFile(fname, pf.Src)
@@ -95,7 +96,7 @@ func (p ParsedPkg) WriteAllMerged(fname string, tests bool) error {
 
 func writeFile(fp string, data []byte) error {
 	dir := filepath.Dir(fp)
-	if dir != "" && dir != "./" {
+	if dir != "" && dir != "./" && dir != "/dev" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}

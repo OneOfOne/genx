@@ -14,7 +14,9 @@
 * If you intend on generating files in the same package, you may add `// +build genx` to your template(s).
 * Transparently handles [genny](https://github.com/cheekybits/genny)'s `generic.Type`.
 * Supports a few [seeds](https://github.com/OneOfOne/genx/tree/master/seeds/).
-* Adds build tags based on the types you pass, so you can target specifc types (ex: `// +build genx_kt_string` or `// +build genx_vt_builtin` )
+* Adds build tags based on the types you pass, so you can target specifc types (ex: `// +build genx_t_string` or `// +build genx_vt_builtin` )
+* Automatically handles nil returns, will return the zero value of the type.
+* Doesn't need modifying the source package if there's only one type involved.
 
 ## Examples:
 ### Package:
@@ -32,17 +34,24 @@
 ➤ genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -v -o ./lmap_string_int.go
 ```
 
+### Modifing an external library that doesn't specifically support generics:
+Using [fatih](https://github.com/fatih)'s excellent [set](https://github.com/fatih/set) library:
+
+```
+# -fn IntSlice -fnStringSlice to remove unneeded functions.
+➤ genx -pkg github.com/fatih/set -t 'interface{}=uint64' -fn IntSlice -fn StringSlice -v -n uint64set -o ./uint64set
+```
 
 ### Target native types with a fallback: [seeds/sort](https://github.com/OneOfOne/genx/tree/master/seeds/sort)
 
 ```
-➤ genx -seed sort -t KT=string -n main
+➤ genx -seed sort -t T=string -n main
 ...
-func StringSlice(s []string, reverse bool) { ... }
+func SortStrings(s []string, reverse bool) { ... }
 ...
-➤ genx -seed sort -t KT=*pkg.OtherType -n main
+➤ genx -seed sort -t T=*pkg.OtherType -n main
 ...
-func PkgTypeSlice(s []string, less func(i, j int) bool) { ... }
+func SortPkgTypes(s []string, less func(i, j int) bool) { ... }
 ...
 ```
 
@@ -109,6 +118,13 @@ func (s StringSet) Delete(vals ...string) {
 	}
 }
 ```
+## FAQ
+
+### Why?
+Mostly a learning experience, also I needed it and the other options available didn't do what I needed.
+
+For Example I needed to remove a field from the struct and change all usage of it for [stringcmap](https://github.com/OneOfOne/cmap/tree/master/stringcmap).
+
 ## TODO
 * Documentation.
 * Add proper examples.
@@ -123,13 +139,7 @@ func (s StringSet) Delete(vals ...string) {
 
 ## BUGS
 * Removing types / funcs doesn't always properly remove their comments.
-
-## FAQ
-
-### Why?
-Mostly a learning experience, also I needed it and the other options available didn't do what I needed.
-
-For Example I needed to remove a field from the struct and change all usage of it for [stringcmap](https://github.com/OneOfOne/cmap/tree/master/stringcmap).
+* While zero (nil) returns are supported, zero compares aren't ( `if x.v == nil` will break if the v isn't a pointer type).
 
 ## Usage:
 ```
