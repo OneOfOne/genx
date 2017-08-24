@@ -16,8 +16,8 @@ type (
 	VT interface{}
 )
 
-// Map is a concurrent map with amortized-constant-time loads, stores, and deletes.
-// It is safe for multiple goroutines to call a Map's methods concurrently.
+// MapKTVT is a concurrent map with amortized-constant-time loads, stores, and deletes.
+// It is safe for multiple goroutines to call a MapKTVT's methods concurrently.
 //
 // It is optimized for use in concurrent loops with keys that are
 // stable over time, and either few steady-state stores, or stores
@@ -27,10 +27,10 @@ type (
 // comparable or worse performance and worse type safety than an ordinary
 // map paired with a read-write mutex.
 //
-// The zero Map is valid and empty.
+// The zero MapKTVT is valid and empty.
 //
-// A Map must not be copied after first use.
-type Map struct {
+// A MapKTVT must not be copied after first use.
+type MapKTVT struct {
 	mu sync.Mutex
 
 	// read contains the portion of the map's contents that are safe for
@@ -106,7 +106,7 @@ func newEntry(i VT) *entry {
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
-func (m *Map) Load(key KT) (value VT, ok bool) {
+func (m *MapKTVT) Load(key KT) (value VT, ok bool) {
 	read, _ := m.read.Load().(readOnly)
 	e, ok := read.m[key]
 	if !ok && read.amended {
@@ -140,7 +140,7 @@ func (e *entry) load() (value VT, ok bool) {
 }
 
 // Store sets the value for a key.
-func (m *Map) Store(key KT, value VT) {
+func (m *MapKTVT) Store(key KT, value VT) {
 	read, _ := m.read.Load().(readOnly)
 	if e, ok := read.m[key]; ok && e.tryStore(&value) {
 		return
@@ -207,7 +207,7 @@ func (e *entry) storeLocked(i *VT) {
 // LoadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
-func (m *Map) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
+func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 	// Avoid locking if it's a clean hit.
 	read, _ := m.read.Load().(readOnly)
 	if e, ok := read.m[key]; ok {
@@ -275,7 +275,7 @@ func (e *entry) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
 }
 
 // Delete deletes the value for a key.
-func (m *Map) Delete(key KT) {
+func (m *MapKTVT) Delete(key KT) {
 	read, _ := m.read.Load().(readOnly)
 	e, ok := read.m[key]
 	if !ok && read.amended {
@@ -314,7 +314,7 @@ func (e *entry) delete() (hadValue bool) {
 //
 // Range may be O(N) with the number of elements in the map even if f returns
 // false after a constant number of calls.
-func (m *Map) Range(f func(key KT, value VT) bool) {
+func (m *MapKTVT) Range(f func(key KT, value VT) bool) {
 	// We need to be able to iterate over all of the keys that were already
 	// present at the start of the call to Range.
 	// If read.amended is false, then read.m satisfies that property without
@@ -347,7 +347,7 @@ func (m *Map) Range(f func(key KT, value VT) bool) {
 	}
 }
 
-func (m *Map) missLocked() {
+func (m *MapKTVT) missLocked() {
 	m.misses++
 	if m.misses < len(m.dirty) {
 		return
@@ -357,7 +357,7 @@ func (m *Map) missLocked() {
 	m.misses = 0
 }
 
-func (m *Map) dirtyLocked() {
+func (m *MapKTVT) dirtyLocked() {
 	if m.dirty != nil {
 		return
 	}

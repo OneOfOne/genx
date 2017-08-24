@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build genx
-// +build !genx_kt_builtin
+// +build !genx_t_builtin
 
 package sort
 
@@ -11,27 +10,27 @@ import (
 	U "github.com/OneOfOne/genx/seeds/sort/utils"
 )
 
-type KT interface{}
+type T interface{}
 
-// KTSlice sorts the provided slice given the provided less function.
+// SortTs sorts the provided slice given the provided less function.
 // The sort is not guaranteed to be stable. For a stable sort, use SliceStable.
 // For reverse sort, return j < i.
-func KTSlice(s []KT, less func(i, j int) bool) {
+func SortTs(s []T, less func(i, j int) bool) {
 	swap := func(i, j int) { s[i], s[j] = s[j], s[i] }
 	U.QuickSort(U.LessSwap{Less: less, Swap: swap}, 0, len(s), U.MaxDepth(len(s)))
 }
 
-// StableKT sorts the provided slice given the provided less
+// StableSortTs sorts the provided slice given the provided less
 // function while keeping the original order of equal elements.
 // For reverse sort, return j < i.
-func StableKT(s []KT, less func(i, j int) bool) {
+func StableSortTs(s []T, less func(i, j int) bool) {
 	swap := func(i, j int) { s[i], s[j] = s[j], s[i] }
 	U.Stable(U.LessSwap{Less: less, Swap: swap}, len(s))
 }
 
-// KTIsSorted tests whether a slice is sorted.
+// TsAreSorted tests whether a slice is sorted.
 // For reverse sort, return j < i.
-func KTIsSorted(s []KT, less func(i, j int) bool) bool {
+func TsAreSorted(s []T, less func(i, j int) bool) bool {
 	for i := len(s) - 1; i > 0; i-- {
 		if less(i, i-1) {
 			return false
