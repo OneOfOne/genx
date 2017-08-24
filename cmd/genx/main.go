@@ -143,7 +143,9 @@ func main() {
 
 	if verbose {
 		log.Printf("rewriters: %+q", g.OrderedRewriters())
+		log.Printf("build tags: %+q", g.BuildTags)
 	}
+
 	switch outPath {
 	case "", "-":
 		outPath = "/dev/stdout"

@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // +build genx
-// +build genx_builtin
+// +build genx_kt_builtin
 
 package sort
 

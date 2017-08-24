@@ -40,7 +40,9 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		irepl:     geireplacer(rewriters, true),
 		BuildTags: []string{"genx"},
 	}
+
 	allBuiltinTypes := true
+
 	for k, v := range rewriters {
 		name, pkg, sel := parsePackageWithType(v)
 		if pkg != "" {
@@ -61,25 +63,30 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 			case "field":
 				g.rewriters["selector:."+kw] = sel
 			case "type":
-				allBuiltinTypes = allBuiltinTypes && builtins[sel] != ""
-				g.BuildTags = append(g.BuildTags, "genx_type_"+cleanUpName.ReplaceAllString(sel, ""))
+				csel := cleanUpName.ReplaceAllString(sel, "")
+				isBuiltin := csel != "interface" && builtins[csel] != ""
+				allBuiltinTypes = allBuiltinTypes && isBuiltin
+				if isBuiltin {
+					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
+				}
+				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
 			}
 
 		}
 
-		if allBuiltinTypes {
-			g.BuildTags = append(g.BuildTags, "genx_builtin")
-		}
-
-		log.Println(g.BuildTags)
-
 		g.rewriters[k] = sel
 	}
-	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\bnolint\b`))
+
+	if allBuiltinTypes {
+		g.BuildTags = append(g.BuildTags, "genx_builtin")
+	}
+
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build \!?genx.*|go:generate genx`))
 	return g
 }
 
+// Parse parses the input file or src and returns a ParsedFile and/or an error.
+// For more details about fname/src check `go/parser.ParseFile`
 func (g *GenX) Parse(fname string, src interface{}) (ParsedFile, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, fname, src, parser.ParseComments)
@@ -90,11 +97,12 @@ func (g *GenX) Parse(fname string, src interface{}) (ParsedFile, error) {
 	return g.process(0, fset, fname, file)
 }
 
+// ParsePKG will parse the provided package, on success it will then process the files with
+// x/tools/imports (goimports) then return the resulting package.
 func (g *GenX) ParsePkg(path string, includeTests bool) (out ParsedPkg, err error) {
-	//fset := token.NewFileSet()
 	ctx := build.Default
 	ctx.BuildTags = append(ctx.BuildTags, g.BuildTags...)
-	log.Println(path, ctx.BuildTags)
+
 	pkg, err := ctx.ImportDir(path, build.IgnoreVendor)
 	if err != nil {
 		return nil, err
