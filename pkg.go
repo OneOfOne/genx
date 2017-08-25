@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"golang.org/x/tools/imports"
@@ -39,10 +38,9 @@ func (p ParsedPkg) WritePkg(dir string) error {
 	return nil
 }
 
-// TODO: look into doing this with ast
-var cleanSrc = regexp.MustCompile(`// nolint`)
-
 func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
+	// TODO: look into doing this with ast
+	// var cleanSrc = regexp.MustCompile(`// nolint$`)
 	var totalLen int
 	for _, f := range p {
 		isTest := strings.HasSuffix(f.Name, "_test.go")
@@ -62,7 +60,7 @@ func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 		if (isTest && !tests) || (!isTest && tests) {
 			continue
 		}
-		f.Src = cleanSrc.ReplaceAll(f.Src, []byte("$1"))
+		// f.Src = cleanSrc.ReplaceAll(f.Src, []byte("$1"))
 		if i > 0 {
 			f.Src = removePkgAndImports.ReplaceAll(f.Src, nil)
 		}

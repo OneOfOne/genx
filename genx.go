@@ -11,7 +11,6 @@ import (
 	"log"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -26,7 +25,7 @@ type GenX struct {
 	crepl          *strings.Replacer
 	irepl          *strings.Replacer
 	imports        map[string]string
-	zero_types     []string
+	zero_types     map[string]struct{}
 	curReturnTypes []string
 	visited        map[ast.Node]bool
 	// filters   map[reflect.Type]func(n ast.Node) ast.Node
@@ -38,13 +37,14 @@ type GenX struct {
 
 func New(pkgName string, rewriters map[string]string) *GenX {
 	g := &GenX{
-		pkgName:   pkgName,
-		rewriters: map[string]string{},
-		imports:   map[string]string{},
-		visited:   map[ast.Node]bool{},
-		crepl:     geireplacer(rewriters, false),
-		irepl:     geireplacer(rewriters, true),
-		BuildTags: []string{"genx"},
+		pkgName:    pkgName,
+		rewriters:  map[string]string{},
+		imports:    map[string]string{},
+		visited:    map[ast.Node]bool{},
+		crepl:      geireplacer(rewriters, false),
+		irepl:      geireplacer(rewriters, true),
+		zero_types: map[string]struct{}{},
+		BuildTags:  []string{"genx"},
 	}
 
 	for k, v := range rewriters {
@@ -73,7 +73,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
-				g.zero_types = append(g.zero_types, sel)
+				g.zero_types[sel] = struct{}{}
 			}
 		}
 
@@ -81,7 +81,6 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 	}
 
 	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build \!?genx.*|go:generate genx`))
-	sort.Strings(g.zero_types)
 	return g
 }
 
@@ -157,8 +156,8 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 
 	if idx == 0 && len(g.zero_types) > 0 {
 		buf.WriteByte('\n')
-		for _, t := range g.zero_types {
-			fmt.Fprintf(&buf, "var zero_%s %s\n", cleanUpName.ReplaceAllString(t, ""), t)
+		for t := range g.zero_types {
+			fmt.Fprintf(&buf, "var zero_%s %s // nolint\n", cleanUpName.ReplaceAllString(t, ""), t)
 		}
 	}
 	if pf.Src, err = imports.Process(name, buf.Bytes(), &imports.Options{
@@ -206,10 +205,12 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				break
 			}
 			if nn == "-" || nn == "" {
+				nukeComments(n.Doc, n.Comment)
 				return deleteNode()
 			}
 			switch n.Type.(type) {
 			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
+				nukeComments(n.Doc, n.Comment)
 				return deleteNode()
 			default:
 				//
@@ -343,8 +344,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			//			log.Printf("%#+v %s", getIdent(r), g.curReturnTypes)
 			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
 				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
-				if indexOf(g.zero_types, crt) > -1 {
-					log.Println(g.zero_types)
+				if _, ok := g.zero_types[crt]; ok {
 					rt.Name = "zero_" + cleanUpName.ReplaceAllString(crt, "")
 				}
 			}

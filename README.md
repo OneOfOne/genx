@@ -32,6 +32,21 @@
 * Merged output `map[interface{}]interface{}`: [cmap_iface_iface.go](https://github.com/OneOfOne/cmap/blob/master/cmap_iface_iface.go)
 * Merged output `map[string]interface{}`: [stringcmap/cmap_string_iface.go](https://github.com/OneOfOne/cmap/blob/master/stringcmap/cmap_string_iface.go)
 
+### Advanced type targeting:
+**Input**:
+
+* https://github.com/OneOfOne/cmap/blob/master/cmap_if_cmplx.go
+* https://github.com/OneOfOne/cmap/blob/master/cmap_if_number_amd32.go
+* https://github.com/OneOfOne/cmap/blob/master/cmap_if_number_amd64.go
+* https://github.com/OneOfOne/cmap/blob/master/cmap_if_string.go
+* https://github.com/OneOfOne/cmap/blob/master/cmap_if_other.go
+* https://github.com/OneOfOne/cmap/blob/master/cmap.go
+* https://github.com/OneOfOne/cmap/blob/master/lmap.go
+
+**Output**:
+* [`-t KT=interface{},VT=interface{}`](https://github.com/OneOfOne/cmap/blob/master/cmap_iface_iface.go)
+* [`-t KT=string,VT=interface{}`](https://github.com/OneOfOne/cmap/blob/master/stringcmap/cmap_string_iface.go)
+* [`-t KT=uint64,VT=interface{}`](https://github.com/OneOfOne/cmap/blob/master/u64cmap/cmap_u64_iface.go)
 ### Single File:
 ```bash
 ➤ genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -v -o ./lmap_string_int.go
@@ -141,9 +156,7 @@ For Example I needed to remove a field from the struct and change all usage of i
 ## Credits
 * The excellent [astrewrite](https://github.com/fatih/astrewrite) library by [Fatih](https://github.com/fatih).
 
-## BUGS
-* ~~Removing types / funcs doesn't always properly remove their comments.~~
-* While zero (nil) returns are supported, zero compares aren't ( `if x.v == nil` will break if the v isn't a pointer type).
+## [BUGS](https://github.com/OneOfOne/genx/issues?utf8=%E2%9C%93&q=label%3Abug%20)
 
 ## Usage ([`cmd/genx`](https://github.com/OneOfOne/genx/tree/master/cmd/genx/main.go)):
 ```
