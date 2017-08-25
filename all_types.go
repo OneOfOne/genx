@@ -7,7 +7,7 @@ import "github.com/cheekybits/genny/generic"
 type KT generic.Type
 type VT interface{}
 
-type Both struct {
+type BothKT struct {
 	K KT
 	V VT
 
@@ -15,7 +15,7 @@ type Both struct {
 	RemoveMeToo int // comment
 }
 
-// comment
+// RemoveMe comment
 func (b *Both) RemoveMe() {
 	b.K = new(KT)
 	b.V = new(VT)

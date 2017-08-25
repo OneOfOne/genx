@@ -23,8 +23,8 @@ import (
 type GenX struct {
 	pkgName        string
 	rewriters      map[string]string
-	crepl          func(string) string
-	irepl          func(string) string
+	crepl          *strings.Replacer
+	irepl          *strings.Replacer
 	imports        map[string]string
 	zero_types     []string
 	curReturnTypes []string
@@ -42,8 +42,8 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		rewriters: map[string]string{},
 		imports:   map[string]string{},
 		visited:   map[ast.Node]bool{},
-		crepl:     reRepl(rewriters, false),
-		irepl:     reRepl(rewriters, true),
+		crepl:     geireplacer(rewriters, false),
+		irepl:     geireplacer(rewriters, true),
 		BuildTags: []string{"genx"},
 	}
 
@@ -241,7 +241,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			if ok {
 				t.Name = nn
 			} else {
-				t.Name = g.irepl(t.Name)
+				t.Name = g.irepl.Replace(t.Name)
 			}
 		}
 
@@ -259,7 +259,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			}
 			n.Name = t
 		} else {
-			n.Name = g.irepl(n.Name)
+			n.Name = g.irepl.Replace(n.Name)
 		}
 
 	case *ast.Field:
@@ -279,7 +279,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			if ok {
 				n.Name = nn
 			} else {
-				n.Name = g.irepl(n.Name)
+				n.Name = g.irepl.Replace(n.Name)
 			}
 			names = append(names, n)
 
@@ -296,7 +296,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				return deleteNode()
 			}
 		}
-		n.Text = g.crepl(n.Text)
+		n.Text = g.crepl.Replace(n.Text)
 
 	case *ast.KeyValueExpr:
 		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {
@@ -315,7 +315,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 					x.Name = n.Sel.Name
 					return x, true
 				}
-				x.Name, n.Sel.Name = g.irepl(x.Name), g.irepl(n.Sel.Name)
+				x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
 				break
 			}
 			if nv == "-" {
@@ -394,7 +394,7 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 			}
 			t.Name = nt
 		} else {
-			t.Name = g.irepl(t.Name)
+			t.Name = g.irepl.Replace(t.Name)
 		}
 	case *ast.StarExpr:
 		if t.X = g.rewriteExprTypes(prefix, t.X); t.X == nil {
