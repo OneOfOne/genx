@@ -228,8 +228,19 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			}
 		}
 		if recv := n.Recv; recv != nil && len(recv.List) == 1 {
-			if t := getIdent(recv.List[0].Type); t != nil && !g.isValidKey("type:"+t.Name) {
+			t := getIdent(recv.List[0].Type)
+			if t == nil {
+				log.Panicf("hmm... %#+v", recv.List[0].Type)
+			}
+			nn, ok := rewr["func:"+t.Name]
+			if nn == "-" {
 				return deleteNode()
+			}
+			if ok {
+				t.Name = nn
+			} else {
+				t.Name = g.irepl.Replace(t.Name)
+				// break
 			}
 		}
 
@@ -257,12 +268,14 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 
 		names := n.Names[:0]
 		for _, n := range n.Names {
-			nn := rewr["field:"+n.Name]
+			nn, ok := rewr["field:"+n.Name]
 			if nn == "-" {
 				continue
 			}
-			if nn != "" {
+			if ok {
 				n.Name = nn
+			} else {
+				n.Name = g.irepl.Replace(n.Name)
 			}
 			names = append(names, n)
 
@@ -297,6 +310,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 					x.Name = n.Sel.Name
 					return x, true
 				}
+				x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
 				break
 			}
 			if nv == "-" {
@@ -304,10 +318,12 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			}
 			if xsel := strings.Split(nv, "."); len(xsel) == 2 {
 				x.Name, n.Sel.Name = xsel[0], xsel[1]
+				break
 			} else {
 				x.Name = nv
 				return x, true
 			}
+
 		}
 	case *ast.InterfaceType:
 		if n.Methods != nil && len(n.Methods.List) == 0 {
@@ -319,6 +335,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 	case *ast.ReturnStmt:
 		for i, r := range n.Results {
+			//			log.Printf("%#+v %s", getIdent(r), g.curReturnTypes)
 			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
 				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
 				if indexOf(g.zero_types, crt) > -1 {
@@ -370,6 +387,8 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 				return nil
 			}
 			t.Name = nt
+		} else {
+			t.Name = g.irepl.Replace(t.Name)
 		}
 	case *ast.StarExpr:
 		if t.X = g.rewriteExprTypes(prefix, t.X); t.X == nil {
@@ -404,6 +423,7 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 			lst := t.Results.List
 			g.curReturnTypes = g.curReturnTypes[:0]
 			for i, p := range lst {
+				log.Println(i, p)
 				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
 					return nil
 				}

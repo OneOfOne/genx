@@ -40,7 +40,7 @@ type MapKTVT struct {
 	// mu held.
 	//
 	// Entries stored in read may be updated concurrently without mu, but updating
-	// a previously-expungedVT entry requires that the entry be copied to the dirty
+	// a previously-expungedVT entryVT requires that the entryVT be copied to the dirty
 	// map and unexpungedVT with mu held.
 	read atomic.Value // readOnly
 
@@ -48,13 +48,13 @@ type MapKTVT struct {
 	// held. To ensure that the dirty map can be promoted to the read map quickly,
 	// it also includes all of the non-expungedVT entries in the read map.
 	//
-	// ExpungedVT entries are not stored in the dirty map. An expungedVT entry in the
+	// ExpungedVT entries are not stored in the dirty map. An expungedVT entryVT in the
 	// clean map must be unexpungedVT and added to the dirty map before a new value
 	// can be stored to it.
 	//
 	// If the dirty map is nil, the next write to the map will initialize it by
 	// making a shallow copy of the clean map, omitting stale entries.
-	dirty map[KT]*entry
+	dirty map[KT]*entryVT
 
 	// misses counts the number of loads since the read map was last updated that
 	// needed to lock mu to determine whether the key was present.
@@ -67,7 +67,7 @@ type MapKTVT struct {
 
 // readOnly is an immutable struct stored atomically in the Map.read field.
 type readOnly struct {
-	m       map[KT]*entry
+	m       map[KT]*entryVT
 	amended bool // true if the dirty map contains some key not in m.
 }
 
@@ -75,31 +75,31 @@ type readOnly struct {
 // from the dirty map.
 var expungedVT = unsafe.Pointer(new(VT))
 
-// An entry is a slot in the map corresponding to a particular key.
-type entry struct {
-	// p points to the interface{} value stored for the entry.
+// An entryVT is a slot in the map corresponding to a particular key.
+type entryVT struct {
+	// p points to the interface{} value stored for the entryVT.
 	//
-	// If p == nil, the entry has been deleted and m.dirty == nil.
+	// If p == nil, the entryVT has been deleted and m.dirty == nil.
 	//
-	// If p == expungedVT, the entry has been deleted, m.dirty != nil, and the entry
+	// If p == expungedVT, the entryVT has been deleted, m.dirty != nil, and the entryVT
 	// is missing from m.dirty.
 	//
-	// Otherwise, the entry is valid and recorded in m.read.m[key] and, if m.dirty
+	// Otherwise, the entryVT is valid and recorded in m.read.m[key] and, if m.dirty
 	// != nil, in m.dirty[key].
 	//
-	// An entry can be deleted by atomic replacement with nil: when m.dirty is
+	// An entryVT can be deleted by atomic replacement with nil: when m.dirty is
 	// next created, it will atomically replace nil with expungedVT and leave
 	// m.dirty[key] unset.
 	//
-	// An entry's associated value can be updated by atomic replacement, provided
-	// p != expungedVT. If p == expungedVT, an entry's associated value can be updated
+	// An entryVT's associated value can be updated by atomic replacement, provided
+	// p != expungedVT. If p == expungedVT, an entryVT's associated value can be updated
 	// only after first setting m.dirty[key] = e so that lookups using the dirty
-	// map find the entry.
+	// map find the entryVT.
 	p unsafe.Pointer // *interface{}
 }
 
-func newEntry(i VT) *entry {
-	return &entry{p: unsafe.Pointer(&i)}
+func newEntryVT(i VT) *entryVT {
+	return &entryVT{p: unsafe.Pointer(&i)}
 }
 
 // Load returns the value stored in the map for a key, or nil if no
@@ -117,7 +117,7 @@ func (m *MapKTVT) Load(key KT) (value VT, ok bool) {
 		e, ok = read.m[key]
 		if !ok && read.amended {
 			e, ok = m.dirty[key]
-			// Regardless of whether the entry was present, record a miss: this key
+			// Regardless of whether the entryVT was present, record a miss: this key
 			// will take the slow path until the dirty map is promoted to the read
 			// map.
 			m.missLocked()
@@ -130,7 +130,7 @@ func (m *MapKTVT) Load(key KT) (value VT, ok bool) {
 	return e.load()
 }
 
-func (e *entry) load() (value VT, ok bool) {
+func (e *entryVT) load() (value VT, ok bool) {
 	p := atomic.LoadPointer(&e.p)
 	if p == nil || p == expungedVT {
 		return nil, false
@@ -149,8 +149,8 @@ func (m *MapKTVT) Store(key KT, value VT) {
 	read, _ = m.read.Load().(readOnly)
 	if e, ok := read.m[key]; ok {
 		if e.unexpungeLocked() {
-			// The entry was previously expungedVT, which implies that there is a
-			// non-nil dirty map and this entry is not in it.
+			// The entryVT was previously expungedVT, which implies that there is a
+			// non-nil dirty map and this entryVT is not in it.
 			m.dirty[key] = e
 		}
 		e.storeLocked(&value)
@@ -163,16 +163,16 @@ func (m *MapKTVT) Store(key KT, value VT) {
 			m.dirtyLocked()
 			m.read.Store(readOnly{m: read.m, amended: true})
 		}
-		m.dirty[key] = newEntry(value)
+		m.dirty[key] = newEntryVT(value)
 	}
 	m.mu.Unlock()
 }
 
-// tryStore stores a value if the entry has not been expungedVT.
+// tryStore stores a value if the entryVT has not been expungedVT.
 //
-// If the entry is expungedVT, tryStore returns false and leaves the entry
+// If the entryVT is expungedVT, tryStore returns false and leaves the entryVT
 // unchanged.
-func (e *entry) tryStore(i *VT) bool {
+func (e *entryVT) tryStore(i *VT) bool {
 	p := atomic.LoadPointer(&e.p)
 	if p == expungedVT {
 		return false
@@ -188,18 +188,18 @@ func (e *entry) tryStore(i *VT) bool {
 	}
 }
 
-// unexpungeLocked ensures that the entry is not marked as expungedVT.
+// unexpungeLocked ensures that the entryVT is not marked as expungedVT.
 //
-// If the entry was previously expungedVT, it must be added to the dirty map
+// If the entryVT was previously expungedVT, it must be added to the dirty map
 // before m.mu is unlocked.
-func (e *entry) unexpungeLocked() (wasExpungedVT bool) {
+func (e *entryVT) unexpungeLocked() (wasExpungedVT bool) {
 	return atomic.CompareAndSwapPointer(&e.p, expungedVT, nil)
 }
 
-// storeLocked unconditionally stores a value to the entry.
+// storeLocked unconditionally stores a value to the entryVT.
 //
-// The entry must be known not to be expungedVT.
-func (e *entry) storeLocked(i *VT) {
+// The entryVT must be known not to be expungedVT.
+func (e *entryVT) storeLocked(i *VT) {
 	atomic.StorePointer(&e.p, unsafe.Pointer(i))
 }
 
@@ -233,7 +233,7 @@ func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 			m.dirtyLocked()
 			m.read.Store(readOnly{m: read.m, amended: true})
 		}
-		m.dirty[key] = newEntry(value)
+		m.dirty[key] = newEntryVT(value)
 		actual, loaded = value, false
 	}
 	m.mu.Unlock()
@@ -241,12 +241,12 @@ func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 	return actual, loaded
 }
 
-// tryLoadOrStore atomically loads or stores a value if the entry is not
+// tryLoadOrStore atomically loads or stores a value if the entryVT is not
 // expungedVT.
 //
-// If the entry is expungedVT, tryLoadOrStore leaves the entry unchanged and
+// If the entryVT is expungedVT, tryLoadOrStore leaves the entryVT unchanged and
 // returns with ok==false.
-func (e *entry) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
+func (e *entryVT) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
 	p := atomic.LoadPointer(&e.p)
 	if p == expungedVT {
 		return nil, false, false
@@ -256,7 +256,7 @@ func (e *entry) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
 	}
 
 	// Copy the interface after the first load to make this method more amenable
-	// to escape analysis: if we hit the "load" path or the entry is expungedVT, we
+	// to escape analysis: if we hit the "load" path or the entryVT is expungedVT, we
 	// shouldn't bother heap-allocating.
 	ic := i
 	for {
@@ -291,7 +291,7 @@ func (m *MapKTVT) Delete(key KT) {
 	}
 }
 
-func (e *entry) delete() (hadValue bool) {
+func (e *entryVT) delete() (hadValue bool) {
 	for {
 		p := atomic.LoadPointer(&e.p)
 		if p == nil || p == expungedVT {
@@ -362,7 +362,7 @@ func (m *MapKTVT) dirtyLocked() {
 	}
 
 	read, _ := m.read.Load().(readOnly)
-	m.dirty = make(map[KT]*entry, len(read.m))
+	m.dirty = make(map[KT]*entryVT, len(read.m))
 	for k, e := range read.m {
 		if !e.tryExpungeLocked() {
 			m.dirty[k] = e
@@ -370,7 +370,7 @@ func (m *MapKTVT) dirtyLocked() {
 	}
 }
 
-func (e *entry) tryExpungeLocked() (isExpungedVT bool) {
+func (e *entryVT) tryExpungeLocked() (isExpungedVT bool) {
 	p := atomic.LoadPointer(&e.p)
 	for p == nil {
 		if atomic.CompareAndSwapPointer(&e.p, nil, expungedVT) {
