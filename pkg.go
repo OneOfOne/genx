@@ -40,7 +40,7 @@ func (p ParsedPkg) WritePkg(dir string) error {
 }
 
 // TODO: look into doing this with ast
-var cleanSrc = regexp.MustCompile(`(?s:\n\n\n)|//.*?\n\n\n|\n// nolint`)
+var cleanSrc = regexp.MustCompile(`// nolint`)
 
 func (p ParsedPkg) MergeAll(tests bool) (ParsedFile, error) {
 	var totalLen int

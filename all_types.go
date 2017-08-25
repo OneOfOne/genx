@@ -12,9 +12,10 @@ type Both struct {
 	V VT
 
 	Call        func(k KT) VT
-	RemoveMeToo int
+	RemoveMeToo int // comment
 }
 
+// comment
 func (b *Both) RemoveMe() {
 	b.K = new(KT)
 	b.V = new(VT)

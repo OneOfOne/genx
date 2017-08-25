@@ -142,7 +142,7 @@ For Example I needed to remove a field from the struct and change all usage of i
 * The excellent [astrewrite](https://github.com/fatih/astrewrite) library by [Fatih](https://github.com/fatih).
 
 ## BUGS
-* Removing types / funcs doesn't always properly remove their comments.
+* ~~Removing types / funcs doesn't always properly remove their comments.~~
 * While zero (nil) returns are supported, zero compares aren't ( `if x.v == nil` will break if the v isn't a pointer type).
 
 ## Usage ([`cmd/genx`](https://github.com/OneOfOne/genx/tree/master/cmd/genx/main.go)):

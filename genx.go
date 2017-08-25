@@ -23,8 +23,8 @@ import (
 type GenX struct {
 	pkgName        string
 	rewriters      map[string]string
-	crepl          *strings.Replacer
-	irepl          *strings.Replacer
+	crepl          func(string) string
+	irepl          func(string) string
 	imports        map[string]string
 	zero_types     []string
 	curReturnTypes []string
@@ -42,8 +42,8 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		rewriters: map[string]string{},
 		imports:   map[string]string{},
 		visited:   map[ast.Node]bool{},
-		crepl:     geireplacer(rewriters, false),
-		irepl:     geireplacer(rewriters, true),
+		crepl:     reRepl(rewriters, false),
+		irepl:     reRepl(rewriters, true),
 		BuildTags: []string{"genx"},
 	}
 
@@ -221,6 +221,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		if t := getIdent(n.Name); t != nil {
 			nn := rewr["func:"+t.Name]
 			if nn == "-" {
+				nukeComments(n.Doc)
 				return deleteNode()
 			} else if nn != "" {
 				t.Name = nn
@@ -234,17 +235,20 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			}
 			nn, ok := rewr["func:"+t.Name]
 			if nn == "-" {
+				nukeComments(n.Doc)
 				return deleteNode()
 			}
 			if ok {
 				t.Name = nn
 			} else {
-				t.Name = g.irepl.Replace(t.Name)
-				// break
+				t.Name = g.irepl(t.Name)
 			}
 		}
 
-		if n.Type, _ = g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); n.Type == nil {
+		if t, ok := g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); ok {
+			n.Type = t
+		} else {
+			nukeComments(n.Doc)
 			return deleteNode()
 		}
 
@@ -255,7 +259,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			}
 			n.Name = t
 		} else {
-			n.Name = g.irepl.Replace(n.Name)
+			n.Name = g.irepl(n.Name)
 		}
 
 	case *ast.Field:
@@ -275,13 +279,14 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			if ok {
 				n.Name = nn
 			} else {
-				n.Name = g.irepl.Replace(n.Name)
+				n.Name = g.irepl(n.Name)
 			}
 			names = append(names, n)
 
 		}
-		// TODO (BUG):doesn't remove associated comments for some reason.
+
 		if n.Names = names; len(n.Names) == 0 {
+			nukeComments(n.Doc, n.Comment)
 			return deleteNode()
 		}
 
@@ -291,7 +296,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				return deleteNode()
 			}
 		}
-		n.Text = g.crepl.Replace(n.Text)
+		n.Text = g.crepl(n.Text)
 
 	case *ast.KeyValueExpr:
 		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {
@@ -310,7 +315,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 					x.Name = n.Sel.Name
 					return x, true
 				}
-				x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
+				x.Name, n.Sel.Name = g.irepl(x.Name), g.irepl(n.Sel.Name)
 				break
 			}
 			if nv == "-" {
@@ -357,12 +362,13 @@ func indexOf(ss []string, v string) int {
 	}
 	return -1
 }
-func (g *GenX) isValidKey(n string) bool {
-	v, ok := g.rewriters[n]
-	if !ok {
-		return true
+
+func nukeComments(cgs ...*ast.CommentGroup) {
+	for _, cg := range cgs {
+		if cg != nil {
+			cg.List = nil
+		}
 	}
-	return v != "-" && v != ""
 }
 
 func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
@@ -388,7 +394,7 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 			}
 			t.Name = nt
 		} else {
-			t.Name = g.irepl.Replace(t.Name)
+			t.Name = g.irepl(t.Name)
 		}
 	case *ast.StarExpr:
 		if t.X = g.rewriteExprTypes(prefix, t.X); t.X == nil {
@@ -411,26 +417,21 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 		}
 	case *ast.FuncType:
 		if t.Params != nil {
-			lst := t.Params.List
-			for i, p := range lst {
+			for _, p := range t.Params.List {
 				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
 					return nil
 				}
-				lst[i] = p
 			}
 		}
 		if t.Results != nil {
-			lst := t.Results.List
 			g.curReturnTypes = g.curReturnTypes[:0]
-			for i, p := range lst {
-				log.Println(i, p)
+			for _, p := range t.Results.List {
 				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
 					return nil
 				}
 				if rt := getIdent(p.Type); rt != nil {
 					g.curReturnTypes = append(g.curReturnTypes, rt.Name)
 				}
-				lst[i] = p
 			}
 		}
 	}
@@ -455,18 +456,44 @@ func geireplacer(m map[string]string, ident bool) *strings.Replacer {
 	for k, v := range m {
 		k = k[strings.Index(k, ":")+1:]
 		if ident {
-			v = cleanUpName.ReplaceAllString(strings.Title(v), "")
 
 			if a := builtins[v]; a != "" {
 				v = a
 			} else {
-				v = cleanUpName.ReplaceAllString(v, "")
+				v = cleanUpName.ReplaceAllString(strings.Title(v), "")
 			}
 		}
 
 		kv = append(kv, k, v)
 	}
 	return strings.NewReplacer(kv...)
+}
+
+var replRe = regexp.MustCompile(`\b([\w\d_]+)\b`)
+
+func reRepl(m map[string]string, ident bool) func(src string) string {
+	kv := map[string]string{}
+	for k, v := range m {
+		k = k[strings.Index(k, ":")+1:]
+		if ident {
+			if a := builtins[v]; a != "" {
+				v = a
+			} else {
+				v = cleanUpName.ReplaceAllString(strings.Title(v), "")
+			}
+		}
+
+		kv[k] = v
+	}
+	return func(src string) string {
+		re := replRe.Copy()
+		return re.ReplaceAllStringFunc(src, func(in string) string {
+			if v := kv[in]; v != "" {
+				return v
+			}
+			return in
+		})
+	}
 }
 
 var builtins = map[string]string{
