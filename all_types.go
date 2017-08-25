@@ -16,19 +16,20 @@ type BothKT struct {
 }
 
 // RemoveMe comment
-func (b *Both) RemoveMe() {
+func (b *BothKT) RemoveMe() {
 	b.K = new(KT)
 	b.V = new(VT)
 }
 
-func (b Both) RemoveMe2() {
+// some comment
+func (b BothKT) RemoveMe2() {
 	b.K = new(KT)
 	b.V = new(VT)
 }
 
-func DoStuff(k KT) VT {
-	var b Both
-	return b.Call(k)
+func DoStuff(k ...KT) VT {
+	var b BothKT
+	return b.Call(k[0])
 }
 
 var (

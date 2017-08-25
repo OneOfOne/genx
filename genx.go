@@ -25,11 +25,9 @@ type GenX struct {
 	crepl          *strings.Replacer
 	irepl          *strings.Replacer
 	imports        map[string]string
-	zero_types     map[string]struct{}
+	zero_types     map[string]bool
 	curReturnTypes []string
 	visited        map[ast.Node]bool
-	// filters   map[reflect.Type]func(n ast.Node) ast.Node
-	// cfg       *struct{}
 
 	BuildTags      []string
 	CommentFilters []*regexp.Regexp
@@ -43,7 +41,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		visited:    map[ast.Node]bool{},
 		crepl:      geireplacer(rewriters, false),
 		irepl:      geireplacer(rewriters, true),
-		zero_types: map[string]struct{}{},
+		zero_types: map[string]bool{},
 		BuildTags:  []string{"genx"},
 	}
 
@@ -73,7 +71,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
-				g.zero_types[sel] = struct{}{}
+				g.zero_types[sel] = false
 			}
 		}
 
@@ -156,8 +154,10 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 
 	if idx == 0 && len(g.zero_types) > 0 {
 		buf.WriteByte('\n')
-		for t := range g.zero_types {
-			fmt.Fprintf(&buf, "var zero_%s %s // nolint\n", cleanUpName.ReplaceAllString(t, ""), t)
+		for t, used := range g.zero_types {
+			if used {
+				fmt.Fprintf(&buf, "var zero_%s %s\n", cleanUpName.ReplaceAllString(t, ""), t)
+			}
 		}
 	}
 	if pf.Src, err = imports.Process(name, buf.Bytes(), &imports.Options{
@@ -205,12 +205,10 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				break
 			}
 			if nn == "-" || nn == "" {
-				nukeComments(n.Doc, n.Comment)
 				return deleteNode()
 			}
 			switch n.Type.(type) {
 			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
-				nukeComments(n.Doc, n.Comment)
 				return deleteNode()
 			default:
 				//
@@ -222,7 +220,6 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		if t := getIdent(n.Name); t != nil {
 			nn := rewr["func:"+t.Name]
 			if nn == "-" {
-				nukeComments(n.Doc)
 				return deleteNode()
 			} else if nn != "" {
 				t.Name = nn
@@ -234,9 +231,9 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			if t == nil {
 				log.Panicf("hmm... %#+v", recv.List[0].Type)
 			}
-			nn, ok := rewr["func:"+t.Name]
+			nn, ok := rewr["type:"+t.Name]
+
 			if nn == "-" {
-				nukeComments(n.Doc)
 				return deleteNode()
 			}
 			if ok {
@@ -249,7 +246,9 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		if t, ok := g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); ok {
 			n.Type = t
 		} else {
-			nukeComments(n.Doc)
+			return deleteNode()
+		}
+		if g.checkFuncBody(n.Body) {
 			return deleteNode()
 		}
 
@@ -287,7 +286,6 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 
 		if n.Names = names; len(n.Names) == 0 {
-			nukeComments(n.Doc, n.Comment)
 			return deleteNode()
 		}
 
@@ -341,10 +339,10 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 	case *ast.ReturnStmt:
 		for i, r := range n.Results {
-			//			log.Printf("%#+v %s", getIdent(r), g.curReturnTypes)
 			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
 				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
 				if _, ok := g.zero_types[crt]; ok {
+					g.zero_types[crt] = true
 					rt.Name = "zero_" + cleanUpName.ReplaceAllString(crt, "")
 				}
 			}
@@ -363,12 +361,24 @@ func indexOf(ss []string, v string) int {
 	return -1
 }
 
-func nukeComments(cgs ...*ast.CommentGroup) {
-	for _, cg := range cgs {
-		if cg != nil {
-			cg.List = nil
-		}
+func (g *GenX) checkFuncBody(bs *ast.BlockStmt) (found bool) {
+	if bs == nil {
+		return
 	}
+	ast.Inspect(bs, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.Ident:
+			if found = g.rewriters["type:"+n.Name] == "-"; found {
+				return false
+			}
+			// TODO handle removed fields / funcs
+		}
+		return true
+	})
+	return
 }
 
 func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {

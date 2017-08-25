@@ -1,3 +1,6 @@
+//go:generate git submodule foreach git pull origin master
+//go:generate git submodule update --remote --checkout --recursive
+
 package genx
 
 import (
