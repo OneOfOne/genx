@@ -9,7 +9,7 @@
 
 ## Features
 * It can be *easily* used with `go generate`, from the command line or as a library.
-* Uses local files, packages, and automatically uses `go get` if the remote package doesn't exist.
+* `cmd/genx` Uses local files, packages, and optionally uses `go get` (with the `-get` flag) if the remote package doesn't exist.
 * You can rewrite, remove and change pretty much everything.
 * Allows you to merge a package of multiple files into a single one.
 * *Safely* remove functions and struct fields.
@@ -145,9 +145,8 @@ For Example I needed to remove a field from the struct and change all usage of i
 * Removing types / funcs doesn't always properly remove their comments.
 * While zero (nil) returns are supported, zero compares aren't ( `if x.v == nil` will break if the v isn't a pointer type).
 
-## Usage:
+## Usage ([`cmd/genx`](https://github.com/OneOfOne/genx/tree/master/cmd/genx/main.go)):
 ```
-➤ genx -h
 usage: genx [-t T=type] [-s xx.xx=[yy.]yy] [-fld struct-field-to-remove] [-fn func-to-remove] [-tags "go build tags"]
   [-m] [-n package-name] [-pkg input package] [-f input file] [-o output file or dir]
 
@@ -172,29 +171,30 @@ Examples:
 
 Flags:
   -f file
-    	file to parse
+        file to parse
   -fld field
-    	struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
+        struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
   -fn value
-    	func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
+        func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
+  -get
+        go get the package if it doesn't exist
   -goFlags flags
-    	extra go get flags (ex: -goFlags '-t -race')
-  -m	merge all the files in a package into one
+        extra go get flags (ex: -goFlags '-t -race')
   -n package name
-    	package name sets the output package name, uses input package name if empty.
+        package name sets the output package name, uses input package name if empty.
   -o string
-    	output dir if parsing a package or output filename if parsing a file (default "/dev/stdin")
+        output dir if parsing a package or output filename if parsing a file (default "/dev/stdin")
   -pkg package
-    	package to parse
+        package to parse
   -s selector spec
-    	selector specs to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
+        selector specs to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
   -seed <seed>
-    	alias for -m -pkg github.com/OneOfOne/seeds/<seed>
+        alias for -m -pkg github.com/OneOfOne/seeds/<seed>
   -t type spec
-    	generic type specs to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
+        generic type specs to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
   -tags tags
-    	go build tags, used for parsing and automatically passed to go get.
-  -v	verbose
+        go build tags, used for parsing and automatically passed to go get.
+  -v    verbose
 ```
 
 ## Contributions

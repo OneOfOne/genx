@@ -47,6 +47,7 @@ var (
 	goFlags    string
 	pkgName    string
 	mergeFiles bool
+	goGet      bool
 	verbose    bool
 )
 
@@ -90,6 +91,7 @@ Flags:`)
 	flag.StringVar(&pkgName, "n", "", "`package name` sets the output package name, uses input package name if empty.")
 	flag.StringVar(&goFlags, "goFlags", "", "extra go get `flags` (ex: -goFlags '-t -race')")
 	flag.BoolVar(&verbose, "v", false, "verbose")
+	flag.BoolVar(&goGet, "get", false, "go get the package if it doesn't exist")
 
 	flag.Parse()
 }
@@ -162,7 +164,7 @@ func main() {
 	if inPkg != "" {
 		out, err := goListThenGet(g.BuildTags, inPkg)
 		if err != nil {
-			log.Fatalf("error:\n%s\n", out)
+			log.Fatalf("error: %s\n", out)
 		}
 		inPkg = out
 		// if !strings.HasPrefix(inpk, prefix string)
@@ -231,7 +233,10 @@ func goListThenGet(tags []string, path string) (out string, err error) {
 	listArgs := append([]string{"list", "-f", "{{.Dir}}"}, args...)
 
 	if out, err = execCmd("go", listArgs...); err != nil && strings.Contains(out, "cannot find package") {
-
+		if !goGet {
+			out = fmt.Sprintf("`%s` not found and `-get` isn't specified.", path)
+			return
+		}
 		if out, err = execCmd("go", append([]string{"get", "-u", "-v"}, args...)...); err == nil && isFile {
 			out, err = execCmd("go", listArgs...)
 		}
