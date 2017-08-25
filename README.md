@@ -1,4 +1,7 @@
-# GenX : Generics For Go, Yet Again. [![GoDoc](https://godoc.org/github.com/OneOfOne/genx?status.svg)](https://godoc.org/github.com/OneOfOne/genx) [![Build Status](https://travis-ci.org/OneOfOne/genx.svg?branch=master)](https://travis-ci.org/OneOfOne/genx)
+# GenX : Generics For Go, Yet Again.
+[![GoDoc](https://godoc.org/github.com/OneOfOne/genx?status.svg)](https://godoc.org/github.com/OneOfOne/genx)
+[![Build Status](https://travis-ci.org/OneOfOne/genx.svg?branch=master)](https://travis-ci.org/OneOfOne/genx)
+[![Report Card](https://goreportcard.com/badge/github.com/OneOfOne/genx)](https://goreportcard.com/report/github.com/OneOfOne/genx)
 
 ## Install
 
@@ -127,10 +130,11 @@ For Example I needed to remove a field from the struct and change all usage of i
 
 ## TODO
 * Documentation.
-* Add proper examples.
+* Documention for using the library rather than the commandline.
 * Support package tests.
 * Handle removing comments properly rather than using regexp.
-* Common seeds.
+* More seeds.
+* ~~Add proper examples.~~
 * ~~Support specalized functions by type.~~
 * ~~Support removing structs and their methods.~~
 
