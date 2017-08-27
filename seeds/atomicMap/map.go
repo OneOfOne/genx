@@ -65,8 +65,8 @@ type MapKTVT struct {
 	misses int
 }
 
-// readOnly is an immutable struct stored atomically in the Map.read field.
-type readOnly struct {
+// readOnlyKTVT is an immutable struct stored atomically in the Map.read field.
+type readOnlyKTVT struct {
 	m       map[KT]*entryVT
 	amended bool // true if the dirty map contains some key not in m.
 }
@@ -106,14 +106,14 @@ func newEntryVT(i VT) *entryVT {
 // value is present.
 // The ok result indicates whether value was found in the map.
 func (m *MapKTVT) Load(key KT) (value VT, ok bool) {
-	read, _ := m.read.Load().(readOnly)
+	read, _ := m.read.Load().(readOnlyKTVT)
 	e, ok := read.m[key]
 	if !ok && read.amended {
 		m.mu.Lock()
 		// Avoid reporting a spurious miss if m.dirty got promoted while we were
 		// blocked on m.mu. (If further loads of the same key will not miss, it's
 		// not worth copying the dirty map for this key.)
-		read, _ = m.read.Load().(readOnly)
+		read, _ = m.read.Load().(readOnlyKTVT)
 		e, ok = read.m[key]
 		if !ok && read.amended {
 			e, ok = m.dirty[key]
@@ -140,13 +140,13 @@ func (e *entryVT) load() (value VT, ok bool) {
 
 // Store sets the value for a key.
 func (m *MapKTVT) Store(key KT, value VT) {
-	read, _ := m.read.Load().(readOnly)
+	read, _ := m.read.Load().(readOnlyKTVT)
 	if e, ok := read.m[key]; ok && e.tryStore(&value) {
 		return
 	}
 
 	m.mu.Lock()
-	read, _ = m.read.Load().(readOnly)
+	read, _ = m.read.Load().(readOnlyKTVT)
 	if e, ok := read.m[key]; ok {
 		if e.unexpungeLocked() {
 			// The entryVT was previously expungedVT, which implies that there is a
@@ -161,7 +161,7 @@ func (m *MapKTVT) Store(key KT, value VT) {
 			// We're adding the first new key to the dirty map.
 			// Make sure it is allocated and mark the read-only map as incomplete.
 			m.dirtyLocked()
-			m.read.Store(readOnly{m: read.m, amended: true})
+			m.read.Store(readOnlyKTVT{m: read.m, amended: true})
 		}
 		m.dirty[key] = newEntryVT(value)
 	}
@@ -208,7 +208,7 @@ func (e *entryVT) storeLocked(i *VT) {
 // The loaded result is true if the value was loaded, false if stored.
 func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 	// Avoid locking if it's a clean hit.
-	read, _ := m.read.Load().(readOnly)
+	read, _ := m.read.Load().(readOnlyKTVT)
 	if e, ok := read.m[key]; ok {
 		actual, loaded, ok = e.tryLoadOrStore(value)
 		if ok {
@@ -217,7 +217,7 @@ func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 	}
 
 	m.mu.Lock()
-	read, _ = m.read.Load().(readOnly)
+	read, _ = m.read.Load().(readOnlyKTVT)
 	if e, ok := read.m[key]; ok {
 		if e.unexpungeLocked() {
 			m.dirty[key] = e
@@ -231,7 +231,7 @@ func (m *MapKTVT) LoadOrStore(key KT, value VT) (actual VT, loaded bool) {
 			// We're adding the first new key to the dirty map.
 			// Make sure it is allocated and mark the read-only map as incomplete.
 			m.dirtyLocked()
-			m.read.Store(readOnly{m: read.m, amended: true})
+			m.read.Store(readOnlyKTVT{m: read.m, amended: true})
 		}
 		m.dirty[key] = newEntryVT(value)
 		actual, loaded = value, false
@@ -275,11 +275,11 @@ func (e *entryVT) tryLoadOrStore(i VT) (actual VT, loaded, ok bool) {
 
 // Delete deletes the value for a key.
 func (m *MapKTVT) Delete(key KT) {
-	read, _ := m.read.Load().(readOnly)
+	read, _ := m.read.Load().(readOnlyKTVT)
 	e, ok := read.m[key]
 	if !ok && read.amended {
 		m.mu.Lock()
-		read, _ = m.read.Load().(readOnly)
+		read, _ = m.read.Load().(readOnlyKTVT)
 		e, ok = read.m[key]
 		if !ok && read.amended {
 			delete(m.dirty, key)
@@ -318,16 +318,16 @@ func (m *MapKTVT) Range(f func(key KT, value VT) bool) {
 	// present at the start of the call to Range.
 	// If read.amended is false, then read.m satisfies that property without
 	// requiring us to hold m.mu for a long time.
-	read, _ := m.read.Load().(readOnly)
+	read, _ := m.read.Load().(readOnlyKTVT)
 	if read.amended {
 		// m.dirty contains keys not in read.m. Fortunately, Range is already O(N)
 		// (assuming the caller does not break out early), so a call to Range
 		// amortizes an entire copy of the map: we can promote the dirty copy
 		// immediately!
 		m.mu.Lock()
-		read, _ = m.read.Load().(readOnly)
+		read, _ = m.read.Load().(readOnlyKTVT)
 		if read.amended {
-			read = readOnly{m: m.dirty}
+			read = readOnlyKTVT{m: m.dirty}
 			m.read.Store(read)
 			m.dirty = nil
 			m.misses = 0
@@ -351,7 +351,7 @@ func (m *MapKTVT) missLocked() {
 	if m.misses < len(m.dirty) {
 		return
 	}
-	m.read.Store(readOnly{m: m.dirty})
+	m.read.Store(readOnlyKTVT{m: m.dirty})
 	m.dirty = nil
 	m.misses = 0
 }
@@ -361,7 +361,7 @@ func (m *MapKTVT) dirtyLocked() {
 		return
 	}
 
-	read, _ := m.read.Load().(readOnly)
+	read, _ := m.read.Load().(readOnlyKTVT)
 	m.dirty = make(map[KT]*entryVT, len(read.m))
 	for k, e := range read.m {
 		if !e.tryExpungeLocked() {

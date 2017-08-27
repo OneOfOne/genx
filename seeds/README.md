@@ -23,8 +23,9 @@
 ### **[atomicMap](https://github.com/OneOfOne/genx/tree/master/seeds/atomicMap)**
 * The code generated from this seed is under The Go BSD-style [license](https://github.com/OneOfOne/genx/tree/master/seeds/atomicMap/LICENSE).
 * A modified version of [sync.Map](https://tip.golang.org/pkg/sync/#Map) to support code gen.
-* Generate with: `genx -seeds atomicMap -t KT=YourKeyType,VT=YourValueType -n package-name -o ./map_YourKeyType_YourValueType.go`
-* Usage: `var m MapYourKeyTypeYourValueType; v := m.LoadOrStore(some key, some default value)`
+* Generate with: `genx -seeds atomicMap -t KT=YourKeyType,VT=YourValueType -n package-name -o ./somename.go`
+* Generate with (change name): `genx -seeds atomicMap -t KT=YourKeyType,VT=YourValueType,MapKTVT=somethingPrivate -n package-name -o ./somename.go`
+* Usage: `var m somethingPrivate; v, loaded := m.LoadOrStore(some key, some default value)`
 
 ### **[sort](https://github.com/OneOfOne/genx/tree/master/seeds/sort)**
 * The code generated from this seed is under The Go BSD-style [license](https://github.com/OneOfOne/genx/tree/master/seeds/atomicMap/LICENSE).
@@ -44,4 +45,4 @@ SortYourType(yourSlice, func(j, i) bool { return yourSlice[i].X < yourSlice[j].X
 ```
 ## Todo
 
-* Documention fort each seed for Godoc.
+* Documention for each seed.
