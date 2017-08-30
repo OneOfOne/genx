@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"log"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -19,28 +20,42 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+type procFunc func(*xast.Node) *xast.Node
 type GenX struct {
 	pkgName        string
 	rewriters      map[string]string
 	irepl          *strings.Replacer
 	imports        map[string]string
-	zero_types     map[string]bool
+	zeroTypes      map[string]bool
 	curReturnTypes []string
 	visited        map[ast.Node]bool
 
 	BuildTags      []string
 	CommentFilters []func(string) string
+
+	rewriteFuncs map[reflect.Type][]procFunc
 }
 
 func New(pkgName string, rewriters map[string]string) *GenX {
 	g := &GenX{
-		pkgName:    pkgName,
-		rewriters:  map[string]string{},
-		imports:    map[string]string{},
-		visited:    map[ast.Node]bool{},
-		irepl:      geireplacer(rewriters, true),
-		zero_types: map[string]bool{},
-		BuildTags:  []string{"genx"},
+		pkgName:   pkgName,
+		rewriters: map[string]string{},
+		imports:   map[string]string{},
+		visited:   map[ast.Node]bool{},
+		irepl:     geireplacer(rewriters, true),
+		zeroTypes: map[string]bool{},
+		BuildTags: []string{"genx"},
+		CommentFilters: []func(string) string{
+			regexpReplacer(`// \+build [!]?genx.*|//go:generate genx`, ""),
+		},
+	}
+
+	g.rewriteFuncs = map[reflect.Type][]procFunc{
+		reflect.TypeOf((*ast.TypeSpec)(nil)): {g.rewriteTypeSpec},
+		reflect.TypeOf((*ast.Ident)(nil)):    {g.rewriteIdent},
+		reflect.TypeOf((*ast.Field)(nil)):    {g.rewriteField},
+		reflect.TypeOf((*ast.FuncDecl)(nil)): {g.rewriteFuncDecl},
+		reflect.TypeOf((*ast.File)(nil)):     {g.rewriteFile},
 	}
 
 	for k, v := range rewriters {
@@ -69,7 +84,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
-				g.zero_types[sel] = false
+				g.zeroTypes[sel] = false
 				g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\b(`+kw+`)\b`, sel))
 				g.CommentFilters = append(g.CommentFilters, regexpReplacer(`(`+kw+`)`, strings.Title(csel)))
 			}
@@ -78,7 +93,6 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		g.rewriters[k] = sel
 	}
 
-	g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\+build \!?genx.*|go:generate genx`, ""))
 	return g
 }
 
@@ -152,9 +166,9 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 		return
 	}
 
-	if idx == 0 && len(g.zero_types) > 0 {
+	if idx == 0 && len(g.zeroTypes) > 0 {
 		buf.WriteByte('\n')
-		for t, used := range g.zero_types {
+		for t, used := range g.zeroTypes {
 			if used {
 				fmt.Fprintf(&buf, "var zero_%s %s\n", cleanUpName.ReplaceAllString(t, ""), t)
 			}
@@ -180,73 +194,17 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 	}
 	g.visited[n] = true
 
+	if fns, ok := g.rewriteFuncs[reflect.TypeOf(n)]; ok {
+		for _, fn := range fns {
+			if node = fn(node); node.Canceled() {
+				break
+			}
+		}
+		return node
+	}
+
 	rewr := g.rewriters
 	switch n := n.(type) {
-	case *ast.TypeSpec:
-		if t := getIdent(n.Name); t != nil {
-			nn, ok := rewr["type:"+t.Name]
-			if !ok {
-				break
-			}
-			if nn == "-" || nn == "" {
-				return node.Delete()
-			}
-			switch n.Type.(type) {
-			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
-				return node.Delete()
-			default:
-				t.Name = nn
-			}
-
-		}
-
-	case *ast.FuncDecl:
-		if t := getIdent(n.Name); t != nil {
-			nn := rewr["func:"+t.Name]
-			if nn == "-" {
-				return node.Delete()
-			} else if nn != "" {
-				t.Name = nn
-			}
-		}
-
-		if recv := n.Recv; recv != nil && len(recv.List) == 1 {
-			t := getIdent(recv.List[0].Type)
-			if t == nil {
-				log.Panicf("hmm... %#+v", recv.List[0].Type)
-			}
-			nn, ok := rewr["type:"+t.Name]
-
-			if nn == "-" {
-				return node.Delete()
-			}
-			if ok {
-				t.Name = nn
-			} else {
-				t.Name = g.irepl.Replace(t.Name)
-			}
-		}
-
-		if t, ok := g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); ok {
-			n.Type = t
-		} else {
-			return node.Delete()
-		}
-
-		if g.shouldNukeFuncBody(n.Body) {
-			return node.Delete()
-		}
-
-	case *ast.Ident:
-		if t, ok := rewr["type:"+n.Name]; ok {
-			if t == "-" {
-				break
-			}
-			n.Name = t
-		} else {
-			n.Name = g.irepl.Replace(n.Name)
-		}
-
 	case *ast.Field:
 		n.Type = g.rewriteExprTypes("type:", n.Type)
 
@@ -324,12 +282,14 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 		for i, r := range n.Results {
 			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
 				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
-				if _, ok := g.zero_types[crt]; ok {
-					g.zero_types[crt] = true
+				if _, ok := g.zeroTypes[crt]; ok {
+					g.zeroTypes[crt] = true
 					rt.Name = "zero_" + cleanUpName.ReplaceAllString(crt, "")
 				}
 			}
 		}
+	case *ast.File:
+
 	}
 
 	return node

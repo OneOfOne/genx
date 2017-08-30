@@ -36,13 +36,13 @@ var (
 	m    map[KT]VT
 	ktCh chan KT
 	vtCh chan VT
-	kvCh chan Both
+	kvCh chan BothKT
 	ktA  [100]KT
 	vtA  [100]VT
-	a    [100]Both
+	a    [100]BothKT
 	ktS  []KT
 	vtS  []VT
-	s    []Both
+	s    []BothKT
 )
 
 func XXX(vs ...interface{}) interface{} {
