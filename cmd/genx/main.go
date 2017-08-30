@@ -80,7 +80,7 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    "field",
 				Aliases: []string{"-fld"},
-				Usage:   "struct `field`s to remove or rename (ex: -fld HashFn -fld priv=Pub)",
+				Usage:   "struct `field`s to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc)",
 			},
 
 			&cli.StringSliceFlag{

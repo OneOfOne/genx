@@ -6,7 +6,18 @@
     "language": "en",
     // words - list of words to be always considered correct
     "words": [
-        "genx"
+        "Iface",
+        "astrewrite",
+        "cmap",
+        "geireplacer",
+        "genny",
+        "genx",
+        "irepl",
+        "lmap",
+        "sflags",
+        "tions",
+        "vals",
+        "xsel"
     ],
     // flagWords - list of words to be always considered incorrect
     // This is useful for offensive words and common spelling errors.

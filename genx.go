@@ -203,7 +203,6 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 		return node
 	}
 
-	rewr := g.rewriters
 	switch n := n.(type) {
 	case *ast.Field:
 		n.Type = g.rewriteExprTypes("type:", n.Type)
@@ -214,7 +213,7 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 
 		names := n.Names[:0]
 		for _, n := range n.Names {
-			nn, ok := rewr["field:"+n.Name]
+			nn, ok := g.rewriters["field:"+n.Name]
 			if nn == "-" {
 				continue
 			}
@@ -239,7 +238,7 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 		}
 
 	case *ast.KeyValueExpr:
-		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {
+		if key := getIdent(n.Key); key != nil && g.rewriters["field:"+key.Name] == "-" {
 			return node.Delete()
 		}
 

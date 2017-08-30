@@ -17,7 +17,7 @@
 * If you intend on generating files in the same package, you may add `// +build genx` to your template(s).
 * Transparently handles [genny](https://github.com/cheekybits/genny)'s `generic.Type`.
 * Supports a few [seeds](https://github.com/OneOfOne/genx/tree/master/seeds/).
-* Adds build tags based on the types you pass, so you can target specifc types (ex: `// +build genx_t_string` or `// +build genx_vt_builtin` )
+* Adds build tags based on the types you pass, so you can target specific types (ex: `// +build genx_t_string` or `// +build genx_vt_builtin` )
 * Automatically handles nil returns, will return the zero value of the type.
 * Doesn't need modifying the source package if there's only one type involved.
 
@@ -52,7 +52,7 @@
 ➤ genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -v -o ./lmap_string_int.go
 ```
 
-### Modifing an external library that doesn't specifically support generics:
+### Modifying an external library that doesn't specifically support generics:
 Using [fatih](https://github.com/fatih)'s excellent [set](https://github.com/fatih/set) library:
 
 ```
@@ -150,7 +150,7 @@ For Example I needed to remove a field from the struct and change all usage of i
 * Handle removing comments properly rather than using regexp.
 * More seeds.
 * ~~Add proper examples.~~
-* ~~Support specalized functions by type.~~
+* ~~Support specialized functions by type.~~
 * ~~Support removing structs and their methods.~~
 
 ## Credits
@@ -180,7 +180,7 @@ GLOBAL OPTIONS:
    --name name, -n name              package name to use for output, uses the input package's name by default.
    --type type, -t type              generic type names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
    --selector selector, -s selector  selectors to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
-   --field field, -fld field         struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
+   --field field, -fld field         struct fields to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc)
    --func func, -fn func             functions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
    --tags value                      go extra build tags, used for parsing and automatically passed to any go subcommands.
    --go-flags flags                  extra flags to pass to go subcommands flags (ex: --goFlags '-race')
