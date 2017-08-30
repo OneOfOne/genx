@@ -13,7 +13,7 @@ import (
 type T interface{}
 
 // SortTs sorts the provided slice given the provided less function.
-// The sort is not guaranteed to be stable. For a stable sort, use SliceStable.
+// The sort is not guaranteed to be stable. For a stable sort, use StableSortTs.
 // For reverse sort, return j < i.
 func SortTs(s []T, less func(i, j int) bool) {
 	swap := func(i, j int) { s[i], s[j] = s[j], s[i] }

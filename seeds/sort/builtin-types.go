@@ -14,7 +14,7 @@ import (
 type T int
 
 // SortTs sorts the provided slice given the provided less function.
-// The sort is not guaranteed to be stable. For a stable sort, use SliceStable.
+// The sort is not guaranteed to be stable. For a stable sort, use StableSortTs.
 func SortTs(s []T, reverse bool) {
 	var less func(i, j int) bool
 	if reverse {
@@ -40,7 +40,6 @@ func StableSortTs(s []T, reverse bool) {
 }
 
 // TsAreSorted tests whether a slice is sorted.
-// For reverse sort, return j < i from less.
 func TsAreSorted(s []T, reverse bool) bool {
 	var less func(i, j int) bool
 	if reverse {

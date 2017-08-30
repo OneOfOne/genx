@@ -22,7 +22,6 @@ import (
 type GenX struct {
 	pkgName        string
 	rewriters      map[string]string
-	crepl          *strings.Replacer
 	irepl          *strings.Replacer
 	imports        map[string]string
 	zero_types     map[string]bool
@@ -30,7 +29,7 @@ type GenX struct {
 	visited        map[ast.Node]bool
 
 	BuildTags      []string
-	CommentFilters []*regexp.Regexp
+	CommentFilters []func(string) string
 }
 
 func New(pkgName string, rewriters map[string]string) *GenX {
@@ -39,7 +38,6 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		rewriters:  map[string]string{},
 		imports:    map[string]string{},
 		visited:    map[ast.Node]bool{},
-		crepl:      geireplacer(rewriters, false),
 		irepl:      geireplacer(rewriters, true),
 		zero_types: map[string]bool{},
 		BuildTags:  []string{"genx"},
@@ -59,7 +57,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		typ, kw := k[:idx], k[idx+1:]
 
 		if v == "-" {
-			g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\b`+kw+`\b`))
+			g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\b`+kw+`\b`, ""))
 		} else {
 			switch typ {
 			case "field":
@@ -72,13 +70,15 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
 				g.zero_types[sel] = false
+				g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\b(`+kw+`)\b`, sel))
+				g.CommentFilters = append(g.CommentFilters, regexpReplacer(`(`+kw+`)`, strings.Title(csel)))
 			}
 		}
 
 		g.rewriters[k] = sel
 	}
 
-	g.CommentFilters = append(g.CommentFilters, regexp.MustCompile(`\+build \!?genx.*|go:generate genx`))
+	g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\+build \!?genx.*|go:generate genx`, ""))
 	return g
 }
 
@@ -275,11 +275,10 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 
 	case *ast.Comment:
 		for _, f := range g.CommentFilters {
-			if f.MatchString(n.Text) {
+			if n.Text = f(n.Text); n.Text == "" {
 				return node.Delete()
 			}
 		}
-		n.Text = g.crepl.Replace(n.Text)
 
 	case *ast.KeyValueExpr:
 		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {

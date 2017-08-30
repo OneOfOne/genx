@@ -42,3 +42,10 @@ func parsePackageWithType(v string) (name, pkg, sel string) {
 	}
 	return
 }
+
+func regexpReplacer(src string, repl string) func(string) string {
+	re := regexp.MustCompile(src)
+	return func(in string) string {
+		return re.ReplaceAllString(in, repl)
+	}
+}
