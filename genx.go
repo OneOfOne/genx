@@ -182,20 +182,6 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 
 	rewr := g.rewriters
 	switch n := n.(type) {
-	case *ast.File: // handle comments here
-		comments := n.Comments[:0]
-	L:
-		for _, cg := range n.Comments {
-			txt := cg.Text()
-			for _, f := range g.CommentFilters {
-				if f.MatchString(txt) {
-					continue L
-				}
-			}
-			comments = append(comments, cg)
-		}
-		n.Comments = comments
-
 	case *ast.TypeSpec:
 		if t := getIdent(n.Name); t != nil {
 			nn, ok := rewr["type:"+t.Name]
@@ -209,9 +195,9 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
 				return node.Delete()
 			default:
-				//
+				t.Name = nn
 			}
-			t.Name = nn
+
 		}
 
 	case *ast.FuncDecl:
@@ -221,9 +207,9 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 				return node.Delete()
 			} else if nn != "" {
 				t.Name = nn
-				break
 			}
 		}
+
 		if recv := n.Recv; recv != nil && len(recv.List) == 1 {
 			t := getIdent(recv.List[0].Type)
 			if t == nil {
@@ -246,7 +232,8 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 		} else {
 			return node.Delete()
 		}
-		if g.checkFuncBody(n.Body) {
+
+		if g.shouldNukeFuncBody(n.Body) {
 			return node.Delete()
 		}
 
@@ -261,7 +248,6 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 		}
 
 	case *ast.Field:
-		//
 		n.Type = g.rewriteExprTypes("type:", n.Type)
 
 		if len(n.Names) == 0 {
@@ -359,7 +345,7 @@ func indexOf(ss []string, v string) int {
 	return -1
 }
 
-func (g *GenX) checkFuncBody(bs *ast.BlockStmt) (found bool) {
+func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 	if bs == nil {
 		return
 	}
