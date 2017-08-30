@@ -154,7 +154,7 @@ For Example I needed to remove a field from the struct and change all usage of i
 * ~~Support removing structs and their methods.~~
 
 ## Credits
-* The excellent [astrewrite](https://github.com/fatih/astrewrite) library by [Fatih](https://github.com/fatih).
+* Originally used the excellent [astrewrite](https://github.com/fatih/astrewrite) library by [Fatih](https://github.com/fatih).
 
 ## [BUGS](https://github.com/OneOfOne/genx/issues?utf8=%E2%9C%93&q=label%3Abug%20)
 

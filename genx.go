@@ -13,10 +13,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/OneOfOne/xast"
+
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/imports"
-
-	"github.com/fatih/astrewrite"
 )
 
 type GenX struct {
@@ -148,7 +148,7 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 	}
 
 	var buf bytes.Buffer
-	if err = printer.Fprint(&buf, fset, astrewrite.Walk(file, g.rewrite)); err != nil {
+	if err = printer.Fprint(&buf, fset, xast.Walk(file, g.rewrite)); err != nil {
 		return
 	}
 
@@ -173,16 +173,14 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 	return
 }
 
-func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
-	if n == nil {
-		return deleteNode()
-	}
+func (g *GenX) rewrite(node *xast.Node) *xast.Node {
+	n := node.Node()
 	if g.visited[n] {
-		return n, true
+		return node
 	}
 	g.visited[n] = true
+
 	rewr := g.rewriters
-	//
 	switch n := n.(type) {
 	case *ast.File: // handle comments here
 		comments := n.Comments[:0]
@@ -205,11 +203,11 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 				break
 			}
 			if nn == "-" || nn == "" {
-				return deleteNode()
+				return node.Delete()
 			}
 			switch n.Type.(type) {
 			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
-				return deleteNode()
+				return node.Delete()
 			default:
 				//
 			}
@@ -220,7 +218,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		if t := getIdent(n.Name); t != nil {
 			nn := rewr["func:"+t.Name]
 			if nn == "-" {
-				return deleteNode()
+				return node.Delete()
 			} else if nn != "" {
 				t.Name = nn
 				break
@@ -234,7 +232,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 			nn, ok := rewr["type:"+t.Name]
 
 			if nn == "-" {
-				return deleteNode()
+				return node.Delete()
 			}
 			if ok {
 				t.Name = nn
@@ -246,10 +244,10 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		if t, ok := g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); ok {
 			n.Type = t
 		} else {
-			return deleteNode()
+			return node.Delete()
 		}
 		if g.checkFuncBody(n.Body) {
-			return deleteNode()
+			return node.Delete()
 		}
 
 	case *ast.Ident:
@@ -286,55 +284,55 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 
 		if n.Names = names; len(n.Names) == 0 {
-			return deleteNode()
+			return node.Delete()
 		}
 
 	case *ast.Comment:
 		for _, f := range g.CommentFilters {
 			if f.MatchString(n.Text) {
-				return deleteNode()
+				return node.Delete()
 			}
 		}
 		n.Text = g.crepl.Replace(n.Text)
 
 	case *ast.KeyValueExpr:
 		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {
-			return deleteNode()
+			return node.Delete()
 		}
 
 	case *ast.SelectorExpr:
 		if x := getIdent(n.X); x != nil && n.Sel != nil {
 			if nv := g.rewriters["selector:."+n.Sel.Name]; nv != "" {
 				n.Sel.Name = nv
-				return n, true
+				break
 			}
 			nv := g.rewriters["selector:"+x.Name+"."+n.Sel.Name]
 			if nv == "" {
 				if x.Name == g.pkgName {
 					x.Name = n.Sel.Name
-					return x, true
+					return node.SetNode(x)
 				}
 				x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
 				break
 			}
 			if nv == "-" {
-				return deleteNode()
+				return node.Delete()
 			}
 			if xsel := strings.Split(nv, "."); len(xsel) == 2 {
 				x.Name, n.Sel.Name = xsel[0], xsel[1]
 				break
 			} else {
 				x.Name = nv
-				return x, true
+				return node.SetNode(x)
 			}
 
 		}
 	case *ast.InterfaceType:
 		if n.Methods != nil && len(n.Methods.List) == 0 {
 			if nt := g.rewriters["type:interface{}"]; nt != "" {
-				return &ast.Ident{
+				return node.SetNode(&ast.Ident{
 					Name: nt,
-				}, true
+				})
 			}
 		}
 	case *ast.ReturnStmt:
@@ -349,7 +347,7 @@ func (g *GenX) rewrite(n ast.Node) (ast.Node, bool) {
 		}
 	}
 
-	return n, true
+	return node
 }
 
 func indexOf(ss []string, v string) int {
@@ -528,5 +526,3 @@ var builtins = map[string]string{
 	"interface{}": "Iface",
 	"Interface":   "Iface",
 }
-
-func deleteNode() (ast.Node, bool) { return nil, true }
