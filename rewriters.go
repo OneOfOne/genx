@@ -3,7 +3,6 @@ package genx
 import (
 	"go/ast"
 	"log"
-	"strings"
 
 	"github.com/OneOfOne/xast"
 )
@@ -112,20 +111,16 @@ func (g *GenX) rewriteFuncDecl(node *xast.Node) *xast.Node {
 	return node
 }
 
+var nukeGenxComments = regexpReplacer(`// \+build [!]?genx.*|//go:generate genx`, "")
+
 func (g *GenX) rewriteFile(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.File)
 	for _, cg := range n.Comments {
 		list := cg.List[:0]
 		for _, c := range cg.List {
-			for _, f := range g.CommentFilters {
-				if c.Text = f(c.Text); c.Text == "" {
-					break
-				}
-			}
-			if c.Text != "" && strings.TrimSpace(c.Text) != "//" {
+			if c.Text = nukeGenxComments(c.Text); c.Text != "" {
 				list = append(list, c)
 			}
-
 		}
 		cg.List = list
 	}
@@ -136,16 +131,9 @@ func (g *GenX) rewriteFile(node *xast.Node) *xast.Node {
 
 	list := n.Doc.List[:0]
 	for _, c := range n.Doc.List {
-		for _, f := range g.CommentFilters {
-			if c.Text = f(c.Text); c.Text == "" {
-				break
-			}
-		}
-
-		if c.Text != "" && strings.TrimSpace(c.Text) != "//" {
+		if c.Text = nukeGenxComments(c.Text); c.Text != "" {
 			list = append(list, c)
 		}
-
 	}
 	n.Doc.List = list
 	return node

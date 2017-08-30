@@ -41,12 +41,19 @@ func main() {
 		Name:    "genx",
 		Version: "v0.5",
 
+		Commands: []*cli.Command{
+		// {
+		// 	Name:    "implement",
+		// 	Aliases: []string{"impl", "i"},
+		// 	Flags:   []cli.Flag{},
+		// 	Action:  runImpl,
+		// },
+		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "seed",
 				Usage: "alias for -pkg github.com/OneOfOne/genx/seeds/`seed-name`",
 			},
-
 			&cli.StringFlag{
 				Name:    "input",
 				Aliases: []string{"i", "f" /* compatibility */},
@@ -56,7 +63,7 @@ func main() {
 			&cli.StringFlag{
 				Name:    "package",
 				Aliases: []string{"-pkg"},
-				Usage:   "`package` to process",
+				Usage:   "`package` to process.",
 			},
 
 			&cli.StringFlag{
@@ -68,25 +75,32 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    "type",
 				Aliases: []string{"t"},
-				Usage:   "generic `type` names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)",
+				Usage:   "generic `type` names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType).",
 			},
 
 			&cli.StringSliceFlag{
 				Name:    "selector",
 				Aliases: []string{"s"},
-				Usage:   "`selector`s to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')",
+				Usage:   "`selector`s to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something').",
 			},
 
 			&cli.StringSliceFlag{
 				Name:    "field",
 				Aliases: []string{"-fld"},
-				Usage:   "struct `field`s to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc)",
+				Usage:   "struct `field`s to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc).",
 			},
 
 			&cli.StringSliceFlag{
 				Name:    "func",
 				Aliases: []string{"-fn"},
-				Usage:   "`func`tions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)",
+				Usage:   "`func`tions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse).",
+			},
+
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Value:   "/dev/stdout",
+				Usage:   "output dir if parsing a package or output filename if you want the output to be merged.",
 			},
 
 			&cli.StringSliceFlag{
@@ -95,15 +109,8 @@ func main() {
 			},
 
 			&cli.StringSliceFlag{
-				Name:  "go-flags",
+				Name:  "goFlags",
 				Usage: "extra flags to pass to go subcommands `flags` (ex: --goFlags '-race')",
-			},
-
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Value:   "/dev/stdout",
-				Usage:   "output dir if parsing a package or output filename if you want the output to be merged.",
 			},
 
 			&cli.BoolFlag{
@@ -187,6 +194,7 @@ func runGen(c *cli.Context) error {
 		mergeFiles bool
 		inPkg      string
 	)
+
 	switch outPath {
 	case "", "-", "/dev/stdout":
 		outPath = "/dev/stdout"

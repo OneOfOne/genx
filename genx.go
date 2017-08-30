@@ -45,9 +45,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		irepl:     geireplacer(rewriters, true),
 		zeroTypes: map[string]bool{},
 		BuildTags: []string{"genx"},
-		CommentFilters: []func(string) string{
-			regexpReplacer(`// \+build [!]?genx.*|//go:generate genx`, ""),
-		},
+		// CommentFilters: []func(string) string{},
 	}
 
 	g.rewriteFuncs = map[reflect.Type][]procFunc{
