@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -9,97 +8,127 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/OneOfOne/cli"
 	"github.com/OneOfOne/genx"
 )
 
-type sflags []string
+type sflags []*[2]string
 
-func (sf *sflags) String() string {
-	return strings.Join(*sf, " ")
-}
-
-func (sf *sflags) Set(value string) error {
-	parts := strings.Split(value, ",")
-	for i, p := range parts {
-		parts[i] = strings.TrimSpace(p)
+func flattenFlags(in []string) (out sflags) {
+	for _, f := range in {
+		for _, p := range strings.Split(f, ",") {
+			kv := strings.Split(p, "=")
+			switch len(kv) {
+			case 2:
+				out = append(out, &[2]string{strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])})
+			case 1:
+				out = append(out, &[2]string{strings.TrimSpace(kv[0]), ""})
+			}
+		}
 	}
-	*sf = append(*sf, parts...)
-	return nil
-}
-
-func (sf *sflags) Split(i int) (_, _ string) {
-	parts := strings.Split((*sf)[i], "=")
-	switch len(parts) {
-	case 2:
-		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-	case 1:
-		return strings.TrimSpace(parts[0]), ""
-	default:
-		return
-	}
-}
-
-var (
-	types, fields, selectors, funcs, tags sflags
-
-	seed, inFile, inPkg, outPath string
-
-	goFlags    string
-	pkgName    string
-	mergeFiles bool
-	goGet      bool
-	verbose    bool
-)
-
-func init() {
-	log.SetFlags(log.Lshortfile)
-	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, `usage: genx [-t T=type] [-s xx.xx=[yy.]yy] [-fld struct-field-to-remove] [-fn func-to-remove] [-tags "go build tags"]
-  [-m] [-n package-name] [-pkg input package] [-f input file] [-o output file or dir]
-
-Types:
-  The -t/-s flags supports full package paths or short ones and letting goimports handle it.
-  -t "KV=string
-  -t "M=*cmap.CMap"
-  -t "M=github.com/OneOfOne/cmap.*CMap"
-  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers#H.Fnv32"
-  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers.Fnv32"
-  -s "cm.HashFn=hashers.Fnv32"
-  -t "RemoveThisType"
-  -fld "RemoveThisStructField,OtherField=NewFieldName"
-  -fn "RemoveThisFunc,OtherFunc=NewFuncName"
-
-Examples:
-  genx -pkg github.com/OneOfOne/cmap -t "KT=interface{},VT=interface{}" -m -n cmap -o ./cmap.go
-  genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -o ./lmap_string_int.go
-
-  genx -pkg github.com/OneOfOne/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn \
-  -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
-
-Flags:`)
-		flag.PrintDefaults()
-	}
-	flag.Var(&types, "t", "generic `type spec`s to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)")
-	flag.Var(&selectors, "s", "`selector spec`s to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')")
-	flag.Var(&fields, "fld", "struct `field`s to remove or rename (ex: -fld HashFn -fld priv=Pub)")
-	flag.Var(&funcs, "fn", "func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)")
-	flag.Var(&tags, "tags", "go build `tags`, used for parsing and automatically passed to go get.")
-	flag.StringVar(&seed, "seed", "", "alias for -m -pkg github.com/OneOfOne/seeds/`<seed>`")
-	flag.StringVar(&inFile, "f", "", "`file` to parse")
-	flag.StringVar(&inPkg, "pkg", "", "`package` to parse")
-	flag.StringVar(&outPath, "o", "/dev/stdout", "output dir if parsing a package or output filename if parsing a file")
-	flag.StringVar(&pkgName, "n", "", "`package name` sets the output package name, uses input package name if empty.")
-	flag.StringVar(&goFlags, "goFlags", "", "extra go get `flags` (ex: -goFlags '-t -race')")
-	flag.BoolVar(&verbose, "v", false, "verbose")
-	flag.BoolVar(&goGet, "get", false, "go get the package if it doesn't exist")
-
-	flag.Parse()
+	return
 }
 
 func main() {
+	log.SetFlags(log.Lshortfile)
+	cli.VersionFlag = &cli.BoolFlag{
+		Name:    "version",
+		Aliases: []string{"V"},
+		Usage:   "print the version",
+	}
+
+	app := &cli.App{
+		Name:    "genx",
+		Version: "v0.5",
+
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "seed",
+				Usage: "alias for -pkg github.com/OneOfOne/genx/seeds/`seed-name`",
+			},
+
+			&cli.StringFlag{
+				Name:    "input",
+				Aliases: []string{"i", "f" /* compatibility */},
+				Usage:   "`file` to process, use `-` to process stdin.",
+			},
+
+			&cli.StringFlag{
+				Name:    "package",
+				Aliases: []string{"-pkg"},
+				Usage:   "`package` to process",
+			},
+
+			&cli.StringFlag{
+				Name:    "name",
+				Aliases: []string{"n"},
+				Usage:   "package `name` to use for output, uses the input package's name by default.",
+			},
+
+			&cli.StringSliceFlag{
+				Name:    "type",
+				Aliases: []string{"t"},
+				Usage:   "generic `type` names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)",
+			},
+
+			&cli.StringSliceFlag{
+				Name:    "selector",
+				Aliases: []string{"s"},
+				Usage:   "`selector`s to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')",
+			},
+
+			&cli.StringSliceFlag{
+				Name:    "field",
+				Aliases: []string{"-fld"},
+				Usage:   "struct `field`s to remove or rename (ex: -fld HashFn -fld priv=Pub)",
+			},
+
+			&cli.StringSliceFlag{
+				Name:    "func",
+				Aliases: []string{"-fn"},
+				Usage:   "`func`tions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)",
+			},
+
+			&cli.StringSliceFlag{
+				Name:  "tags",
+				Usage: "go extra build tags, used for parsing and automatically passed to any go subcommands.",
+			},
+
+			&cli.StringSliceFlag{
+				Name:  "go-flags",
+				Usage: "extra flags to pass to go subcommands `flags` (ex: --goFlags '-race')",
+			},
+
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Value:   "/dev/stdout",
+				Usage:   "output dir if parsing a package or output filename if you want the output to be merged.",
+			},
+
+			&cli.BoolFlag{
+				Name:  "get",
+				Usage: "go get the package if it doesn't exist",
+			},
+
+			&cli.BoolFlag{
+				Name:    "verbose",
+				Aliases: []string{"v"},
+				Usage:   "verbose output",
+			},
+		},
+		Action: runGen,
+	}
+
+	// TODO: support other actions
+	app.Run(os.Args)
+}
+
+func runGen(c *cli.Context) error {
 	rewriters := map[string]string{}
-	for i := range types {
-		key, val := types.Split(i)
+
+	for _, kv := range flattenFlags(c.StringSlice("type")) {
+		key, val := kv[0], kv[1]
 		if key == "" {
 			continue
 		}
@@ -108,8 +137,9 @@ func main() {
 		}
 		rewriters["type:"+key] = val
 	}
-	for i := range selectors {
-		key, val := selectors.Split(i)
+
+	for _, kv := range flattenFlags(c.StringSlice("selector")) {
+		key, val := kv[0], kv[1]
 		if key == "" {
 			continue
 		}
@@ -118,8 +148,10 @@ func main() {
 		}
 		rewriters["selector:"+key] = val
 	}
-	for i := range fields {
-		key, val := fields.Split(i)
+
+	for _, kv := range flattenFlags(c.StringSlice("field")) {
+		key, val := kv[0], kv[1]
+
 		if key == "" {
 			continue
 		}
@@ -128,8 +160,10 @@ func main() {
 		}
 		rewriters["field:"+key] = val
 	}
-	for i := range funcs {
-		key, val := funcs.Split(i)
+
+	for _, kv := range flattenFlags(c.StringSlice("func")) {
+		key, val := kv[0], kv[1]
+
 		if key == "" {
 			continue
 		}
@@ -139,14 +173,20 @@ func main() {
 		rewriters["func:"+key] = val
 	}
 
-	g := genx.New(pkgName, rewriters)
-	g.BuildTags = append(g.BuildTags, tags...)
+	g := genx.New(c.String("name"), rewriters)
+	g.BuildTags = append(g.BuildTags, c.StringSlice("tags")...)
 
-	if verbose {
+	if c.Bool("verbose") {
 		log.Printf("rewriters: %+q", g.OrderedRewriters())
 		log.Printf("build tags: %+q", g.BuildTags)
 	}
 
+	var (
+		outPath = c.String("output")
+
+		mergeFiles bool
+		inPkg      string
+	)
 	switch outPath {
 	case "", "-", "/dev/stdout":
 		outPath = "/dev/stdout"
@@ -156,63 +196,66 @@ func main() {
 	// auto merge files if the output is a file not a dir.
 	mergeFiles = !mergeFiles && filepath.Ext(outPath) == ".go"
 
-	if seed != "" {
+	if seed := c.String("seed"); seed != "" {
 		inPkg = "github.com/OneOfOne/genx/seeds/" + seed
 		mergeFiles = true
 	}
 
 	if inPkg != "" {
-		out, err := goListThenGet(g.BuildTags, inPkg)
+		out, err := goListThenGet(c, g.BuildTags, inPkg)
 		if err != nil {
-			log.Fatalf("error: %s\n", out)
+			return cli.Exit(err, 2)
 		}
+
 		inPkg = out
-		// if !strings.HasPrefix(inpk, prefix string)
 		pkg, err := g.ParsePkg(inPkg, false)
+
 		if err != nil {
-			log.Fatalf("error parsing package (%s): %v\n", inPkg, err)
+			return cli.Exit(fmt.Sprintf("error parsing package (%s): %v\n", inPkg, err), 1)
 		}
 
 		if mergeFiles {
-			if err := pkg.WriteAllMerged(outPath, false); err != nil {
-				log.Fatalf("error writing merged package: %v", err)
-			}
+			err = pkg.WriteAllMerged(outPath, false)
 		} else {
-			if err := pkg.WritePkg(outPath); err != nil {
-				log.Fatalf("error writing merged package: %v", err)
+			err = pkg.WritePkg(outPath)
+		}
+
+		if err != nil {
+			return cli.Exit(err, 1)
+		}
+	} else if inFile := c.String("input"); inFile != "" {
+		if inFile != "-" && inFile != "/dev/stdin" {
+			out, err := goListThenGet(c, g.BuildTags, inFile)
+			if err != nil {
+				return cli.Exit(err, 2)
 			}
-		}
-		return
-	}
-
-	switch inFile {
-	case "", "-":
-	default:
-		out, err := goListThenGet(g.BuildTags, inFile)
-		if err != nil {
-			log.Fatalf("error:\n%s\n", out)
+			inFile = out
 		}
 
-		pf, err := g.Parse(out, nil)
+		pf, err := g.Parse(inFile, nil)
 		if err != nil {
-			log.Fatalf("error parsing file (%s): %v\n%s", inFile, err, pf.Src)
+			return cli.Exit(fmt.Sprintf("error parsing file (%s): %v\n%s", inFile, err, pf.Src), 1)
 		}
+
 		if err := pf.WriteFile(outPath); err != nil {
-			log.Fatalf("error writing file: %v", err)
+			return cli.Exit(err, 1)
 		}
+	} else {
+		cli.ShowAppHelpAndExit(c, 1)
 	}
-}
 
-func execCmd(c string, args ...string) (string, error) {
+	return nil
+}
+func execCmd(ctx *cli.Context, c string, args ...string) (string, error) {
 	cmd := exec.Command(c, args...)
-	if verbose {
+	if ctx.Bool("verbose") {
 		log.Printf("executing: %s %s", c, strings.Join(args, " "))
 	}
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 
-func goListThenGet(tags []string, path string) (out string, err error) {
+func goListThenGet(ctx *cli.Context, tags []string, path string) (out string, err error) {
 	if _, err = os.Stat(path); err == nil {
 		return path, nil
 	}
@@ -224,21 +267,19 @@ func goListThenGet(tags []string, path string) (out string, err error) {
 	}
 
 	args := []string{"-tags", strings.Join(tags, " ")}
-	if goFlags != "" {
-		args = append(args, strings.Split(goFlags, " ")...)
-	}
+	args = append(args, ctx.StringSlice("go-flags")...)
 
 	args = append(args, dir)
 
 	listArgs := append([]string{"list", "-f", "{{.Dir}}"}, args...)
 
-	if out, err = execCmd("go", listArgs...); err != nil && strings.Contains(out, "cannot find package") {
-		if !goGet {
-			out = fmt.Sprintf("`%s` not found and `-get` isn't specified.", path)
+	if out, err = execCmd(ctx, "go", listArgs...); err != nil && strings.Contains(out, "cannot find package") {
+		if !ctx.Bool("get") {
+			out = fmt.Sprintf("`%s` not found and `--get` isn't specified.", path)
 			return
 		}
-		if out, err = execCmd("go", append([]string{"get", "-u", "-v"}, args...)...); err == nil && isFile {
-			out, err = execCmd("go", listArgs...)
+		if out, err = execCmd(ctx, "go", append([]string{"get", "-u", "-v"}, args...)...); err == nil && isFile {
+			out, err = execCmd(ctx, "go", listArgs...)
 		}
 	}
 
@@ -247,8 +288,3 @@ func goListThenGet(tags []string, path string) (out string, err error) {
 	}
 	return
 }
-
-/*
-go run cmd/genx/main.go -t KT=string -t "VT=interface{}" -rm-field HashFn -s "cm.HashFn=hashers.Fnv32" -s "cmap=-" -pkg ../cmap/internal/cmap/ -
-	 n stringcmap -m
-*/
