@@ -1,4 +1,0 @@
-[submodule "vendor/github.com/fatih/astrewrite"]
-	path = vendor/github.com/fatih/astrewrite
-	url = https://github.com/OneOfOne/astrewrite
-	branch = master
