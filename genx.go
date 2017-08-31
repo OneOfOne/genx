@@ -63,6 +63,8 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		reflect.TypeOf((*ast.ChanType)(nil)):      {g.rewriteChanType},
 		reflect.TypeOf((*ast.MapType)(nil)):       {g.rewriteMapType},
 		reflect.TypeOf((*ast.FuncType)(nil)):      {g.rewriteFuncType},
+		reflect.TypeOf((*ast.StarExpr)(nil)):      {g.rewriteStarExpr},
+		reflect.TypeOf((*ast.Ellipsis)(nil)):      {g.rewriteEllipsis},
 	}
 
 	for k, v := range rewriters {
@@ -197,6 +199,8 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 	n := node.Node()
 	if g.visited[n] {
+		//dbg.DumpWithDepth(4, n)
+		// log.Printf("%T %#+v", n, node.Parent().Node())
 		return node
 	}
 	g.visited[n] = true
@@ -216,11 +220,20 @@ func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 	if bs == nil {
 		return
 	}
+
 	ast.Inspect(bs, func(n ast.Node) bool {
 		if found {
 			return false
 		}
 		switch n := n.(type) {
+		case *ast.KeyValueExpr:
+			x := getIdent(n.Key)
+			if x == nil {
+				break
+			}
+			if found = g.rewriters["field:"+x.Name] == "-"; found {
+				return false
+			}
 		case *ast.SelectorExpr:
 			x := getIdent(n.X)
 			if x == nil {
@@ -244,63 +257,6 @@ func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 		return true
 	})
 	return
-}
-
-func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
-	if g.visited[ex] {
-		return ex
-	}
-	g.visited[ex] = true
-
-	switch t := ex.(type) {
-	case *ast.InterfaceType:
-		if nt := g.rewriters[prefix+"interface{}"]; nt != "" {
-			if nt == "-" {
-				return nil
-			}
-			ex = &ast.Ident{
-				Name: nt,
-			}
-		}
-	case *ast.Ident:
-		if nt := g.rewriters[prefix+t.Name]; nt != "" {
-			if nt == "-" {
-				return nil
-			}
-			t.Name = nt
-		} else {
-			t.Name = g.irepl.Replace(t.Name)
-		}
-	case *ast.StarExpr:
-		if t.X = g.rewriteExprTypes(prefix, t.X); t.X == nil {
-			return nil
-		}
-	case *ast.Ellipsis:
-		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
-			return nil
-		}
-
-	case *ast.FuncType:
-		if t.Params != nil {
-			for _, p := range t.Params.List {
-				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
-					return nil
-				}
-			}
-		}
-		if t.Results != nil {
-			g.curReturnTypes = g.curReturnTypes[:0]
-			for _, p := range t.Results.List {
-				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
-					return nil
-				}
-				if rt := getIdent(p.Type); rt != nil {
-					g.curReturnTypes = append(g.curReturnTypes, rt.Name)
-				}
-			}
-		}
-	}
-	return ex
 }
 
 func getIdent(ex interface{}) *ast.Ident {

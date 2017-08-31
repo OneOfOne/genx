@@ -40,14 +40,10 @@ func main() {
 	app := &cli.App{
 		Name:    "genx",
 		Version: "v0.5",
-
-		Commands: []*cli.Command{
-		// {
-		// 	Name:    "implement",
-		// 	Aliases: []string{"impl", "i"},
-		// 	Flags:   []cli.Flag{},
-		// 	Action:  runImpl,
-		// },
+		Authors: []*cli.Author{{
+			Name:  "Ahmed <OneOfOne> W.",
+			Email: "oneofone+genx <a.t> gmail <dot> com",
+		},
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -275,7 +271,7 @@ func goListThenGet(ctx *cli.Context, tags []string, path string) (out string, er
 	}
 
 	args := []string{"-tags", strings.Join(tags, " ")}
-	args = append(args, ctx.StringSlice("go-flags")...)
+	args = append(args, ctx.StringSlice("goFlags")...)
 
 	args = append(args, dir)
 

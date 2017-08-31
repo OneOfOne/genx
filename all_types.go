@@ -1,5 +1,3 @@
-// +build ignore
-
 package genx
 
 import "github.com/cheekybits/genny/generic"
@@ -11,18 +9,20 @@ type TypeWithKT struct {
 	K KT
 	V VT
 
-	Call        func(k KT) VT
-	RemoveMeToo VT // comment
+	Call     func(k KT) VT
+	RemoveMe VT // RemoveMe comment
+
+	Iface interface{}
 }
 
-// RemoveMe comment
-func (b *TypeWithKT) RemoveMe() {
+// MethodWithPtr comment
+func (b *TypeWithKT) MethodWithPtr() {
 	b.K = new(KT)
 	b.V = new(VT)
 }
 
-// some comment
-func (b TypeWithKT) RemoveMe2() {
+// MethodWithValue comment
+func (b TypeWithKT) MethodWithValue() {
 	b.K = new(KT)
 	b.V = new(VT)
 }
@@ -32,13 +32,15 @@ func DoRes() *TypeWithKT               { return nil }
 func DoBoth(b *TypeWithKT) *TypeWithKT { return nil }
 
 func DoStuff(k ...KT) VT {
-	b := &TypeWithKT{}
+	b := &TypeWithKT{
+		RemoveMe: nil,
+	}
 	return b.Call(k[0])
 }
 
-func DoStuff2(k ...KT) VT {
+func DoStuffTwo(k ...KT) VT {
 	var b TypeWithKT
-	return b.RemoveMe2
+	return b.RemoveMe
 }
 
 var (
@@ -52,8 +54,7 @@ var (
 	ktS  []KT
 	vtS  []VT
 	s    []*TypeWithKT
-	m    map[TypeWithKT]int
-	mp   map[*TypeWithKT]int
+	mp   map[*TypeWithKT]interface{}
 )
 
 func XXX(vs ...interface{}) interface{} {

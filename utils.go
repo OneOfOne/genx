@@ -6,6 +6,8 @@ package genx
 import (
 	"regexp"
 	"sort"
+
+	"github.com/OneOfOne/xast"
 )
 
 func (g *GenX) OrderedRewriters() (out []string) {
@@ -48,4 +50,9 @@ func regexpReplacer(src string, repl string) func(string) string {
 	return func(in string) string {
 		return re.ReplaceAllString(in, repl)
 	}
+}
+
+func deleteWithParent(n *xast.Node) *xast.Node {
+	n.Parent().Delete()
+	return n.Delete()
 }

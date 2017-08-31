@@ -10,7 +10,11 @@ import (
 
 func (g *GenX) rewriteField(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.Field)
-	n.Type = g.rewriteExprTypes("type:", n.Type)
+	nn := g.rewrite(xast.NewNode(node, n.Type))
+	if nn.Canceled() {
+		return node.Delete()
+	}
+	n.Type = nn.Node().(ast.Expr)
 
 	if len(n.Names) == 0 {
 		return node
@@ -30,7 +34,6 @@ func (g *GenX) rewriteField(node *xast.Node) *xast.Node {
 		names = append(names, n)
 
 	}
-
 	if n.Names = names; len(n.Names) == 0 {
 		return node.Delete()
 	}
@@ -41,19 +44,21 @@ func (g *GenX) rewriteField(node *xast.Node) *xast.Node {
 func (g *GenX) rewriteTypeSpec(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.TypeSpec)
 	if t := getIdent(n.Name); t != nil {
-		nn, ok := g.rewriters["type:"+t.Name]
+		nn := g.rewrite(xast.NewNode(node, n.Type))
+		if nn.Canceled() {
+			g.rewriters["type:"+t.Name] = "-"
+			return node.Delete()
+		}
+		n.Type = nn.Node().(ast.Expr)
+
+		tn, ok := g.rewriters["type:"+t.Name]
 		if !ok {
 			return node
 		}
-		if nn == "-" || nn == "" {
+		if tn == "-" {
 			return node.Delete()
 		}
-		switch n.Type.(type) {
-		case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
-			return node.Delete()
-		default:
-			t.Name = nn
-		}
+		t.Name = tn
 
 	}
 	return node
@@ -63,7 +68,7 @@ func (g *GenX) rewriteIdent(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.Ident)
 	if t, ok := g.rewriters["type:"+n.Name]; ok {
 		if t == "-" {
-			return node
+			return deleteWithParent(node)
 		}
 		n.Name = t
 	} else {
@@ -74,10 +79,33 @@ func (g *GenX) rewriteIdent(node *xast.Node) *xast.Node {
 
 func (g *GenX) rewriteArrayType(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.ArrayType)
-	if x := getIdent(n.Elt); x != nil && g.rewriters["type:"+x.Name] == "-" {
-		node.Parent().Delete()
-		return node.Delete()
+	nn := g.rewrite(xast.NewNode(node, n.Elt))
+	if nn.Canceled() {
+		return deleteWithParent(node)
 	}
+	n.Elt = nn.Node().(ast.Expr)
+	return node
+
+}
+
+func (g *GenX) rewriteEllipsis(node *xast.Node) *xast.Node {
+	n := node.Node().(*ast.Ellipsis)
+	nn := g.rewrite(xast.NewNode(node, n.Elt))
+	if nn.Canceled() {
+		return deleteWithParent(node)
+	}
+	n.Elt = nn.Node().(ast.Expr)
+	return node
+
+}
+
+func (g *GenX) rewriteStarExpr(node *xast.Node) *xast.Node {
+	n := node.Node().(*ast.StarExpr)
+	nn := g.rewrite(xast.NewNode(node, n.X))
+	if nn.Canceled() {
+		return deleteWithParent(node)
+	}
+	n.X = nn.Node().(ast.Expr)
 	return node
 
 }
@@ -85,8 +113,7 @@ func (g *GenX) rewriteArrayType(node *xast.Node) *xast.Node {
 func (g *GenX) rewriteChanType(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.ChanType)
 	if x := getIdent(n.Value); x != nil && g.rewriters["type:"+x.Name] == "-" {
-		node.Parent().Delete()
-		return node.Delete()
+		return deleteWithParent(node)
 	}
 	return node
 }
@@ -95,18 +122,22 @@ func (g *GenX) rewriteFuncType(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.FuncType)
 	if n.Params != nil {
 		for _, p := range n.Params.List {
-			if x := getIdent(p.Type); x != nil && g.rewriters["type:"+x.Name] == "-" {
-				node.Parent().Delete()
+			nn := g.rewrite(xast.NewNode(node, p.Type))
+			if nn.Canceled() {
 				return node.Delete()
 			}
+			p.Type = nn.Node().(ast.Expr)
 		}
 	}
+
 	if n.Results != nil {
 		g.curReturnTypes = g.curReturnTypes[:0]
 		for _, p := range n.Results.List {
-			if x := getIdent(p.Type); x != nil && g.rewriters["type:"+x.Name] == "-" {
+			nn := g.rewrite(xast.NewNode(node, p.Type))
+			if nn.Canceled() {
 				return node.Delete()
 			}
+			p.Type = nn.Node().(ast.Expr)
 			if rt := getIdent(p.Type); rt != nil {
 				g.curReturnTypes = append(g.curReturnTypes, rt.Name)
 			}
@@ -118,14 +149,16 @@ func (g *GenX) rewriteFuncType(node *xast.Node) *xast.Node {
 
 func (g *GenX) rewriteMapType(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.MapType)
-	if x := getIdent(n.Key); x != nil && g.rewriters["type:"+x.Name] == "-" {
-		node.Parent().Delete()
-		return node.Delete()
+	nn := g.rewrite(xast.NewNode(node, n.Key))
+	if nn.Canceled() {
+		return deleteWithParent(node)
 	}
-	if x := getIdent(n.Value); x != nil && g.rewriters["type:"+x.Name] == "-" {
-		node.Parent().Delete()
-		return node.Delete()
+	n.Key = nn.Node().(ast.Expr)
+	nn = g.rewrite(xast.NewNode(node, n.Value))
+	if nn.Canceled() {
+		return deleteWithParent(node)
 	}
+	n.Value = nn.Node().(ast.Expr)
 	return node
 }
 
@@ -141,9 +174,18 @@ func (g *GenX) rewriteComment(node *xast.Node) *xast.Node {
 
 func (g *GenX) rewriteKeyValueExpr(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.KeyValueExpr)
-	if key := getIdent(n.Key); key != nil && g.rewriters["field:"+key.Name] == "-" {
+	if t := getIdent(n.Key); t != nil {
+		if g.rewriters["type:"+t.Name] == "-" || g.rewriters["field:"+t.Name] == "-" {
+			return node.Delete()
+		}
+	}
+
+	nn := g.rewrite(xast.NewNode(node, n.Value))
+	if nn.Canceled() {
 		return node.Delete()
 	}
+	n.Value = nn.Node().(ast.Expr)
+
 	return node
 }
 
@@ -164,7 +206,10 @@ func (g *GenX) rewriteReturnStmt(node *xast.Node) *xast.Node {
 func (g *GenX) rewriteInterfaceType(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.InterfaceType)
 	if n.Methods != nil && len(n.Methods.List) == 0 {
-		if nt := g.rewriters["type:interface{}"]; nt != "" {
+		if nt, ok := g.rewriters["type:interface{}"]; ok {
+			if nt == "-" {
+				return deleteWithParent(node)
+			}
 			return node.SetNode(&ast.Ident{
 				Name: nt,
 			})
@@ -184,6 +229,7 @@ func (g *GenX) rewriteSelectorExpr(node *xast.Node) *xast.Node {
 		n.Sel.Name = nv
 		return node
 	}
+
 	nv := g.rewriters["selector:"+x.Name+"."+n.Sel.Name]
 	if nv == "" {
 		if x.Name == g.pkgName {
@@ -193,9 +239,11 @@ func (g *GenX) rewriteSelectorExpr(node *xast.Node) *xast.Node {
 		x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
 		return node
 	}
+
 	if nv == "-" {
 		return node.Delete()
 	}
+
 	if xsel := strings.Split(nv, "."); len(xsel) == 2 {
 		x.Name, n.Sel.Name = xsel[0], xsel[1]
 	} else {
@@ -234,11 +282,11 @@ func (g *GenX) rewriteFuncDecl(node *xast.Node) *xast.Node {
 		}
 	}
 
-	if t, ok := g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); ok {
-		n.Type = t
-	} else {
+	nn := g.rewrite(xast.NewNode(node, n.Type))
+	if nn.Canceled() {
 		return node.Delete()
 	}
+	n.Type = nn.Node().(*ast.FuncType)
 
 	if g.shouldNukeFuncBody(n.Body) {
 		return node.Delete()
