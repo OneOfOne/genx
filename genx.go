@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"log"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -19,28 +20,50 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+type procFunc func(*xast.Node) *xast.Node
 type GenX struct {
 	pkgName        string
 	rewriters      map[string]string
 	irepl          *strings.Replacer
 	imports        map[string]string
-	zero_types     map[string]bool
+	zeroTypes      map[string]bool
 	curReturnTypes []string
 	visited        map[ast.Node]bool
 
 	BuildTags      []string
 	CommentFilters []func(string) string
+
+	rewriteFuncs map[reflect.Type][]procFunc
 }
 
 func New(pkgName string, rewriters map[string]string) *GenX {
 	g := &GenX{
-		pkgName:    pkgName,
-		rewriters:  map[string]string{},
-		imports:    map[string]string{},
-		visited:    map[ast.Node]bool{},
-		irepl:      geireplacer(rewriters, true),
-		zero_types: map[string]bool{},
-		BuildTags:  []string{"genx"},
+		pkgName:   pkgName,
+		rewriters: map[string]string{},
+		imports:   map[string]string{},
+		visited:   map[ast.Node]bool{},
+		irepl:     geireplacer(rewriters, true),
+		zeroTypes: map[string]bool{},
+		BuildTags: []string{"genx"},
+	}
+
+	g.rewriteFuncs = map[reflect.Type][]procFunc{
+		reflect.TypeOf((*ast.TypeSpec)(nil)):      {g.rewriteTypeSpec},
+		reflect.TypeOf((*ast.Ident)(nil)):         {g.rewriteIdent},
+		reflect.TypeOf((*ast.Field)(nil)):         {g.rewriteField},
+		reflect.TypeOf((*ast.FuncDecl)(nil)):      {g.rewriteFuncDecl},
+		reflect.TypeOf((*ast.File)(nil)):          {g.rewriteFile},
+		reflect.TypeOf((*ast.Comment)(nil)):       {g.rewriteComment},
+		reflect.TypeOf((*ast.SelectorExpr)(nil)):  {g.rewriteSelectorExpr},
+		reflect.TypeOf((*ast.KeyValueExpr)(nil)):  {g.rewriteKeyValueExpr},
+		reflect.TypeOf((*ast.InterfaceType)(nil)): {g.rewriteInterfaceType},
+		reflect.TypeOf((*ast.ReturnStmt)(nil)):    {g.rewriteReturnStmt},
+		reflect.TypeOf((*ast.ArrayType)(nil)):     {g.rewriteArrayType},
+		reflect.TypeOf((*ast.ChanType)(nil)):      {g.rewriteChanType},
+		reflect.TypeOf((*ast.MapType)(nil)):       {g.rewriteMapType},
+		reflect.TypeOf((*ast.FuncType)(nil)):      {g.rewriteFuncType},
+		reflect.TypeOf((*ast.StarExpr)(nil)):      {g.rewriteStarExpr},
+		reflect.TypeOf((*ast.Ellipsis)(nil)):      {g.rewriteEllipsis},
 	}
 
 	for k, v := range rewriters {
@@ -69,7 +92,7 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 					g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_builtin")
 				}
 				g.BuildTags = append(g.BuildTags, "genx_"+strings.ToLower(kw)+"_"+csel)
-				g.zero_types[sel] = false
+				g.zeroTypes[sel] = false
 				g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\b(`+kw+`)\b`, sel))
 				g.CommentFilters = append(g.CommentFilters, regexpReplacer(`(`+kw+`)`, strings.Title(csel)))
 			}
@@ -78,7 +101,6 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		g.rewriters[k] = sel
 	}
 
-	g.CommentFilters = append(g.CommentFilters, regexpReplacer(`\+build \!?genx.*|go:generate genx`, ""))
 	return g
 }
 
@@ -152,9 +174,9 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 		return
 	}
 
-	if idx == 0 && len(g.zero_types) > 0 {
+	if idx == 0 && len(g.zeroTypes) > 0 {
 		buf.WriteByte('\n')
-		for t, used := range g.zero_types {
+		for t, used := range g.zeroTypes {
 			if used {
 				fmt.Fprintf(&buf, "var zero_%s %s\n", cleanUpName.ReplaceAllString(t, ""), t)
 			}
@@ -176,158 +198,16 @@ func (g *GenX) process(idx int, fset *token.FileSet, name string, file *ast.File
 func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 	n := node.Node()
 	if g.visited[n] {
+		//dbg.DumpWithDepth(4, n)
+		// log.Printf("%T %#+v", n, node.Parent().Node())
 		return node
 	}
 	g.visited[n] = true
 
-	rewr := g.rewriters
-	switch n := n.(type) {
-	case *ast.TypeSpec:
-		if t := getIdent(n.Name); t != nil {
-			nn, ok := rewr["type:"+t.Name]
-			if !ok {
+	if fns, ok := g.rewriteFuncs[reflect.TypeOf(n)]; ok {
+		for _, fn := range fns {
+			if node = fn(node); node.Canceled() {
 				break
-			}
-			if nn == "-" || nn == "" {
-				return node.Delete()
-			}
-			switch n.Type.(type) {
-			case *ast.SelectorExpr, *ast.InterfaceType, *ast.Ident:
-				return node.Delete()
-			default:
-				t.Name = nn
-			}
-
-		}
-
-	case *ast.FuncDecl:
-		if t := getIdent(n.Name); t != nil {
-			nn := rewr["func:"+t.Name]
-			if nn == "-" {
-				return node.Delete()
-			} else if nn != "" {
-				t.Name = nn
-			}
-		}
-
-		if recv := n.Recv; recv != nil && len(recv.List) == 1 {
-			t := getIdent(recv.List[0].Type)
-			if t == nil {
-				log.Panicf("hmm... %#+v", recv.List[0].Type)
-			}
-			nn, ok := rewr["type:"+t.Name]
-
-			if nn == "-" {
-				return node.Delete()
-			}
-			if ok {
-				t.Name = nn
-			} else {
-				t.Name = g.irepl.Replace(t.Name)
-			}
-		}
-
-		if t, ok := g.rewriteExprTypes("type:", n.Type).(*ast.FuncType); ok {
-			n.Type = t
-		} else {
-			return node.Delete()
-		}
-
-		if g.shouldNukeFuncBody(n.Body) {
-			return node.Delete()
-		}
-
-	case *ast.Ident:
-		if t, ok := rewr["type:"+n.Name]; ok {
-			if t == "-" {
-				break
-			}
-			n.Name = t
-		} else {
-			n.Name = g.irepl.Replace(n.Name)
-		}
-
-	case *ast.Field:
-		n.Type = g.rewriteExprTypes("type:", n.Type)
-
-		if len(n.Names) == 0 {
-			break
-		}
-
-		names := n.Names[:0]
-		for _, n := range n.Names {
-			nn, ok := rewr["field:"+n.Name]
-			if nn == "-" {
-				continue
-			}
-			if ok {
-				n.Name = nn
-			} else {
-				n.Name = g.irepl.Replace(n.Name)
-			}
-			names = append(names, n)
-
-		}
-
-		if n.Names = names; len(n.Names) == 0 {
-			return node.Delete()
-		}
-
-	case *ast.Comment:
-		for _, f := range g.CommentFilters {
-			if n.Text = f(n.Text); n.Text == "" {
-				return node.Delete()
-			}
-		}
-
-	case *ast.KeyValueExpr:
-		if key := getIdent(n.Key); key != nil && rewr["field:"+key.Name] == "-" {
-			return node.Delete()
-		}
-
-	case *ast.SelectorExpr:
-		if x := getIdent(n.X); x != nil && n.Sel != nil {
-			if nv := g.rewriters["selector:."+n.Sel.Name]; nv != "" {
-				n.Sel.Name = nv
-				break
-			}
-			nv := g.rewriters["selector:"+x.Name+"."+n.Sel.Name]
-			if nv == "" {
-				if x.Name == g.pkgName {
-					x.Name = n.Sel.Name
-					return node.SetNode(x)
-				}
-				x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
-				break
-			}
-			if nv == "-" {
-				return node.Delete()
-			}
-			if xsel := strings.Split(nv, "."); len(xsel) == 2 {
-				x.Name, n.Sel.Name = xsel[0], xsel[1]
-				break
-			} else {
-				x.Name = nv
-				return node.SetNode(x)
-			}
-
-		}
-	case *ast.InterfaceType:
-		if n.Methods != nil && len(n.Methods.List) == 0 {
-			if nt := g.rewriters["type:interface{}"]; nt != "" {
-				return node.SetNode(&ast.Ident{
-					Name: nt,
-				})
-			}
-		}
-	case *ast.ReturnStmt:
-		for i, r := range n.Results {
-			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
-				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
-				if _, ok := g.zero_types[crt]; ok {
-					g.zero_types[crt] = true
-					rt.Name = "zero_" + cleanUpName.ReplaceAllString(crt, "")
-				}
 			}
 		}
 	}
@@ -335,24 +215,39 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 	return node
 }
 
-func indexOf(ss []string, v string) int {
-	for i, s := range ss {
-		if s == v {
-			return i
-		}
-	}
-	return -1
-}
-
 func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 	if bs == nil {
 		return
 	}
+
 	ast.Inspect(bs, func(n ast.Node) bool {
 		if found {
 			return false
 		}
 		switch n := n.(type) {
+		// BUG: maybe? should we delete the func if we remove a field?
+		case *ast.KeyValueExpr:
+			x := getIdent(n.Key)
+			if x == nil {
+				break
+			}
+			if found = g.rewriters["field:"+x.Name] == "-"; found {
+				return false
+			}
+		case *ast.SelectorExpr:
+			x := getIdent(n.X)
+			if x == nil {
+				break
+			}
+			if x.Obj != nil && x.Obj.Type != nil {
+				ot := getIdent(x.Obj.Type)
+				if found = ot != nil && g.rewriters["type:"+ot.Name] == "-"; found {
+					return false
+				}
+			}
+			if found = g.rewriters["field:"+n.Sel.Name] == "-"; found {
+				return false
+			}
 		case *ast.Ident:
 			if found = g.rewriters["type:"+n.Name] == "-"; found {
 				return false
@@ -364,74 +259,7 @@ func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 	return
 }
 
-func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
-	if g.visited[ex] {
-		return ex
-	}
-	g.visited[ex] = true
-
-	switch t := ex.(type) {
-	case *ast.InterfaceType:
-		if nt := g.rewriters[prefix+"interface{}"]; nt != "" {
-			if nt == "-" {
-				return nil
-			}
-			ex = &ast.Ident{
-				Name: nt,
-			}
-		}
-	case *ast.Ident:
-		if nt := g.rewriters[prefix+t.Name]; nt != "" {
-			if nt == "-" {
-				return nil
-			}
-			t.Name = nt
-		} else {
-			t.Name = g.irepl.Replace(t.Name)
-		}
-	case *ast.StarExpr:
-		if t.X = g.rewriteExprTypes(prefix, t.X); t.X == nil {
-			return nil
-		}
-	case *ast.Ellipsis:
-		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
-			return nil
-		}
-	case *ast.ArrayType:
-		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
-			return nil
-		}
-	case *ast.MapType:
-		if t.Key = g.rewriteExprTypes(prefix, t.Key); t.Key == nil {
-			return nil
-		}
-		if t.Value = g.rewriteExprTypes(prefix, t.Value); t.Value == nil {
-			return nil
-		}
-	case *ast.FuncType:
-		if t.Params != nil {
-			for _, p := range t.Params.List {
-				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
-					return nil
-				}
-			}
-		}
-		if t.Results != nil {
-			g.curReturnTypes = g.curReturnTypes[:0]
-			for _, p := range t.Results.List {
-				if p.Type = g.rewriteExprTypes(prefix, p.Type); p.Type == nil {
-					return nil
-				}
-				if rt := getIdent(p.Type); rt != nil {
-					g.curReturnTypes = append(g.curReturnTypes, rt.Name)
-				}
-			}
-		}
-	}
-	return ex
-}
-
-func getIdent(ex ast.Expr) *ast.Ident {
+func getIdent(ex interface{}) *ast.Ident {
 	switch ex := ex.(type) {
 	case *ast.Ident:
 		return ex
@@ -460,33 +288,6 @@ func geireplacer(m map[string]string, ident bool) *strings.Replacer {
 		kv = append(kv, k, v)
 	}
 	return strings.NewReplacer(kv...)
-}
-
-var replRe = regexp.MustCompile(`\b([\w\d_]+)\b`)
-
-func reRepl(m map[string]string, ident bool) func(src string) string {
-	kv := map[string]string{}
-	for k, v := range m {
-		k = k[strings.Index(k, ":")+1:]
-		if ident {
-			if a := builtins[v]; a != "" {
-				v = a
-			} else {
-				v = cleanUpName.ReplaceAllString(strings.Title(v), "")
-			}
-		}
-
-		kv[k] = v
-	}
-	return func(src string) string {
-		re := replRe.Copy()
-		return re.ReplaceAllStringFunc(src, func(in string) string {
-			if v := kv[in]; v != "" {
-				return v
-			}
-			return in
-		})
-	}
 }
 
 var builtins = map[string]string{

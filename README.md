@@ -17,7 +17,7 @@
 * If you intend on generating files in the same package, you may add `// +build genx` to your template(s).
 * Transparently handles [genny](https://github.com/cheekybits/genny)'s `generic.Type`.
 * Supports a few [seeds](https://github.com/OneOfOne/genx/tree/master/seeds/).
-* Adds build tags based on the types you pass, so you can target specifc types (ex: `// +build genx_t_string` or `// +build genx_vt_builtin` )
+* Adds build tags based on the types you pass, so you can target specific types (ex: `// +build genx_t_string` or `// +build genx_vt_builtin` )
 * Automatically handles nil returns, will return the zero value of the type.
 * Doesn't need modifying the source package if there's only one type involved.
 
@@ -52,7 +52,7 @@
 ➤ genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -v -o ./lmap_string_int.go
 ```
 
-### Modifing an external library that doesn't specifically support generics:
+### Modifying an external library that doesn't specifically support generics:
 Using [fatih](https://github.com/fatih)'s excellent [set](https://github.com/fatih/set) library:
 
 ```
@@ -150,7 +150,7 @@ For Example I needed to remove a field from the struct and change all usage of i
 * Handle removing comments properly rather than using regexp.
 * More seeds.
 * ~~Add proper examples.~~
-* ~~Support specalized functions by type.~~
+* ~~Support specialized functions by type.~~
 * ~~Support removing structs and their methods.~~
 
 ## Credits
@@ -160,54 +160,38 @@ For Example I needed to remove a field from the struct and change all usage of i
 
 ## Usage ([`cmd/genx`](https://github.com/OneOfOne/genx/tree/master/cmd/genx/main.go)):
 ```
-usage: genx [-t T=type] [-s xx.xx=[yy.]yy] [-fld struct-field-to-remove] [-fn func-to-remove] [-tags "go build tags"]
-  [-m] [-n package-name] [-pkg input package] [-f input file] [-o output file or dir]
+➤ genx -h
+NAME:
+   genx - Generics For Go, Yet Again.
 
-Types:
-  The -t/-s flags supports full package paths or short ones and letting goimports handle it.
-  -t "KV=string
-  -t "M=*cmap.CMap"
-  -t "M=github.com/OneOfOne/cmap.*CMap"
-  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers#H.Fnv32"
-  -s "cm.HashFn=github.com/OneOfOne/cmap/hashers.Fnv32"
-  -s "cm.HashFn=hashers.Fnv32"
-  -t "RemoveThisType"
-  -fld "RemoveThisStructField,OtherField=NewFieldName"
-  -fn "RemoveThisFunc,OtherFunc=NewFuncName"
+USAGE:
+   genx [global options] command [command options] [arguments...]
 
-Examples:
-  genx -pkg github.com/OneOfOne/cmap -t "KT=interface{},VT=interface{}" -m -n cmap -o ./cmap.go
-  genx -f github.com/OneOfOne/cmap/lmap.go -t "KT=string,VT=int" -fn "NewLMap,NewLMapSize=NewStringInt" -n main -o ./lmap_string_int.go
+VERSION:
+   v0.5
 
-  genx -pkg github.com/OneOfOne/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn \
-  -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
+AUTHOR:
+   Ahmed <OneOfOne> W. <oneofone+genx <a.t> gmail <dot> com>
 
-Flags:
-  -f file
-        file to parse
-  -fld field
-        struct fields to remove or rename (ex: -fld HashFn -fld priv=Pub)
-  -fn value
-        func`s to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
-  -get
-        go get the package if it doesn't exist
-  -goFlags flags
-        extra go get flags (ex: -goFlags '-t -race')
-  -n package name
-        package name sets the output package name, uses input package name if empty.
-  -o string
-        output dir if parsing a package or output filename if parsing a file (default "/dev/stdin")
-  -pkg package
-        package to parse
-  -s selector spec
-        selector specs to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
-  -seed <seed>
-        alias for -m -pkg github.com/OneOfOne/seeds/<seed>
-  -t type spec
-        generic type specs to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
-  -tags tags
-        go build tags, used for parsing and automatically passed to go get.
-  -v    verbose
+COMMANDS:
+     help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --seed seed-name                  alias for -pkg github.com/OneOfOne/genx/seeds/seed-name
+   --in file, -f file                file to process, use `-` to process stdin.
+   --package package, --pkg package  package to process.
+   --name name, -n name              package name to use for output, uses the input package's name by default.
+   --type type, -t type              generic type names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType).
+   --selector selector, -s selector  selectors to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something').
+   --field field, --fld field        struct fields to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc).
+   --func func, --fn func            functions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse).
+   --out value, -o value             output dir if parsing a package or output filename if you want the output to be merged. (default: "/dev/stdout")
+   --tags value                      go extra build tags, used for parsing and automatically passed to any go subcommands.
+   --goFlags flags                   extra flags to pass to go subcommands flags (ex: --goFlags '-race')
+   --get                             go get the package if it doesn't exist (default: false)
+   --verbose, -v                     verbose output (default: false)
+   --help, -h                        show help (default: false)
+   --version, -V                     print the version (default: false)
 ```
 
 ## Contributions
