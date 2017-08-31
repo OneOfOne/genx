@@ -1,3 +1,5 @@
+// +build ignore
+
 package genx
 
 import "github.com/cheekybits/genny/generic"
@@ -41,6 +43,10 @@ func DoStuff(k ...KT) VT {
 func DoStuffTwo(k ...KT) VT {
 	var b TypeWithKT
 	return b.RemoveMe
+}
+
+func ReturnVT() VT {
+	return nil
 }
 
 var (

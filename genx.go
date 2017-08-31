@@ -45,7 +45,6 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 		irepl:     geireplacer(rewriters, true),
 		zeroTypes: map[string]bool{},
 		BuildTags: []string{"genx"},
-		// CommentFilters: []func(string) string{},
 	}
 
 	g.rewriteFuncs = map[reflect.Type][]procFunc{
@@ -288,33 +287,6 @@ func geireplacer(m map[string]string, ident bool) *strings.Replacer {
 		kv = append(kv, k, v)
 	}
 	return strings.NewReplacer(kv...)
-}
-
-var replRe = regexp.MustCompile(`\b([\w\d_]+)\b`)
-
-func reRepl(m map[string]string, ident bool) func(src string) string {
-	kv := map[string]string{}
-	for k, v := range m {
-		k = k[strings.Index(k, ":")+1:]
-		if ident {
-			if a := builtins[v]; a != "" {
-				v = a
-			} else {
-				v = cleanUpName.ReplaceAllString(strings.Title(v), "")
-			}
-		}
-
-		kv[k] = v
-	}
-	return func(src string) string {
-		re := replRe.Copy()
-		return re.ReplaceAllStringFunc(src, func(in string) string {
-			if v := kv[in]; v != "" {
-				return v
-			}
-			return in
-		})
-	}
 }
 
 var builtins = map[string]string{
