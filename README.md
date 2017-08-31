@@ -162,7 +162,7 @@ For Example I needed to remove a field from the struct and change all usage of i
 ```
 ➤ genx -h
 NAME:
-   genx - A new cli application
+   genx - Generics For Go, Yet Again.
 
 USAGE:
    genx [global options] command [command options] [arguments...]
@@ -170,21 +170,24 @@ USAGE:
 VERSION:
    v0.5
 
+AUTHOR:
+   Ahmed <OneOfOne> W. <oneofone+genx <a.t> gmail <dot> com>
+
 COMMANDS:
      help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
    --seed seed-name                  alias for -pkg github.com/OneOfOne/genx/seeds/seed-name
-   --input file, -i file, -f file    file to process, use `-` to process stdin.
-   --package package, -pkg package   package to process
+   --in file, -f file                file to process, use `-` to process stdin.
+   --package package, --pkg package  package to process.
    --name name, -n name              package name to use for output, uses the input package's name by default.
-   --type type, -t type              generic type names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType)
-   --selector selector, -s selector  selectors to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something')
-   --field field, -fld field         struct fields to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc)
-   --func func, -fn func             functions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse)
+   --type type, -t type              generic type names to remove or rename (ex: -t 'KV=string,KV=interface{}' -t RemoveThisType).
+   --selector selector, -s selector  selectors to remove or rename (ex: -s 'cm.HashFn=hashers.Fnv32' -s 'x.Call=Something').
+   --field field, --fld field        struct fields to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc).
+   --func func, --fn func            functions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse).
+   --out value, -o value             output dir if parsing a package or output filename if you want the output to be merged. (default: "/dev/stdout")
    --tags value                      go extra build tags, used for parsing and automatically passed to any go subcommands.
-   --go-flags flags                  extra flags to pass to go subcommands flags (ex: --goFlags '-race')
-   --output value, -o value          output dir if parsing a package or output filename if you want the output to be merged. (default: "/dev/stdout")
+   --goFlags flags                   extra flags to pass to go subcommands flags (ex: --goFlags '-race')
    --get                             go get the package if it doesn't exist (default: false)
    --verbose, -v                     verbose output (default: false)
    --help, -h                        show help (default: false)
