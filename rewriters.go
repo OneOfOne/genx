@@ -2,7 +2,6 @@ package genx
 
 import (
 	"go/ast"
-	"log"
 	"strings"
 
 	"github.com/OneOfOne/xast"
@@ -46,11 +45,9 @@ func (g *GenX) rewriteTypeSpec(node *xast.Node) *xast.Node {
 	if t := getIdent(n.Name); t != nil {
 		nn := g.rewrite(xast.NewNode(node, n.Type))
 		if nn.Canceled() {
-			g.rewriters["type:"+t.Name] = "-"
 			return node.Delete()
 		}
 		n.Type = nn.Node().(ast.Expr)
-
 		tn, ok := g.rewriters["type:"+t.Name]
 		if !ok {
 			return node
@@ -59,6 +56,7 @@ func (g *GenX) rewriteTypeSpec(node *xast.Node) *xast.Node {
 			return node.Delete()
 		}
 		t.Name = tn
+		return node.Delete()
 
 	}
 	return node
@@ -68,7 +66,7 @@ func (g *GenX) rewriteIdent(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.Ident)
 	if t, ok := g.rewriters["type:"+n.Name]; ok {
 		if t == "-" {
-			return deleteWithParent(node)
+			return node.Delete()
 		}
 		n.Name = t
 	} else {
@@ -267,9 +265,6 @@ func (g *GenX) rewriteFuncDecl(node *xast.Node) *xast.Node {
 
 	if recv := n.Recv; recv != nil && len(recv.List) == 1 {
 		t := getIdent(recv.List[0].Type)
-		if t == nil {
-			log.Panicf("hmm... %#+v", recv.List[0].Type)
-		}
 		nn, ok := g.rewriters["type:"+t.Name]
 
 		if nn == "-" {
@@ -282,20 +277,20 @@ func (g *GenX) rewriteFuncDecl(node *xast.Node) *xast.Node {
 		}
 	}
 
+	if g.shouldNukeFuncBody(n.Body) {
+		return node.Delete()
+	}
+
 	nn := g.rewrite(xast.NewNode(node, n.Type))
 	if nn.Canceled() {
 		return node.Delete()
 	}
 	n.Type = nn.Node().(*ast.FuncType)
 
-	if g.shouldNukeFuncBody(n.Body) {
-		return node.Delete()
-	}
-
 	return node
 }
 
-var nukeGenxComments = regexpReplacer(`// \+build [!]?genx.*|//go:generate genx`, "")
+var nukeGenxComments = regexpReplacer(`// \+build.*|//go:generate.*`, "")
 
 func (g *GenX) rewriteFile(node *xast.Node) *xast.Node {
 	n := node.Node().(*ast.File)

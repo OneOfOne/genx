@@ -39,6 +39,7 @@ func main() {
 
 	app := &cli.App{
 		Name:    "genx",
+		Usage:   "Generics For Go, Yet Again.",
 		Version: "v0.5",
 		Authors: []*cli.Author{{
 			Name:  "Ahmed <OneOfOne> W.",
@@ -51,8 +52,8 @@ func main() {
 				Usage: "alias for -pkg github.com/OneOfOne/genx/seeds/`seed-name`",
 			},
 			&cli.StringFlag{
-				Name:    "input",
-				Aliases: []string{"i"},
+				Name:    "in",
+				Aliases: []string{"f"},
 				Usage:   "`file` to process, use `-` to process stdin.",
 			},
 
@@ -93,7 +94,7 @@ func main() {
 			},
 
 			&cli.StringFlag{
-				Name:    "output",
+				Name:    "out",
 				Aliases: []string{"o"},
 				Value:   "/dev/stdout",
 				Usage:   "output dir if parsing a package or output filename if you want the output to be merged.",
@@ -185,7 +186,7 @@ func runGen(c *cli.Context) error {
 	}
 
 	var (
-		outPath = c.String("output")
+		outPath = c.String("out")
 
 		mergeFiles bool
 		inPkg      string
@@ -203,6 +204,8 @@ func runGen(c *cli.Context) error {
 	if seed := c.String("seed"); seed != "" {
 		inPkg = "github.com/OneOfOne/genx/seeds/" + seed
 		mergeFiles = true
+	} else {
+		inPkg = c.String("package")
 	}
 
 	if inPkg != "" {
@@ -227,7 +230,7 @@ func runGen(c *cli.Context) error {
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
-	} else if inFile := c.String("input"); inFile != "" {
+	} else if inFile := c.String("in"); inFile != "" {
 		if inFile != "-" && inFile != "/dev/stdin" {
 			out, err := goListThenGet(c, g.BuildTags, inFile)
 			if err != nil {
@@ -245,7 +248,8 @@ func runGen(c *cli.Context) error {
 			return cli.Exit(err, 1)
 		}
 	} else {
-		cli.ShowAppHelpAndExit(c, 1)
+		log.Println(c.FlagNames())
+		// cli.ShowAppHelpAndExit(c, 1)
 	}
 
 	return nil

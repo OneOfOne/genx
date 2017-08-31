@@ -225,6 +225,7 @@ func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 			return false
 		}
 		switch n := n.(type) {
+		// BUG: maybe? should we delete the func if we remove a field?
 		case *ast.KeyValueExpr:
 			x := getIdent(n.Key)
 			if x == nil {

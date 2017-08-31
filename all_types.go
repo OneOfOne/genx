@@ -4,9 +4,12 @@ package genx
 
 import "github.com/cheekybits/genny/generic"
 
-type KT generic.Type
-type VT interface{}
+type T generic.Type
 
+type (
+	KT interface{}
+	VT interface{}
+)
 type TypeWithKT struct {
 	K KT
 	V VT
