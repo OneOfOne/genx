@@ -7,42 +7,53 @@ import "github.com/cheekybits/genny/generic"
 type KT generic.Type
 type VT interface{}
 
-type BothKT struct {
+type TypeWithKT struct {
 	K KT
 	V VT
 
 	Call        func(k KT) VT
-	RemoveMeToo int // comment
+	RemoveMeToo VT // comment
 }
 
 // RemoveMe comment
-func (b *BothKT) RemoveMe() {
+func (b *TypeWithKT) RemoveMe() {
 	b.K = new(KT)
 	b.V = new(VT)
 }
 
 // some comment
-func (b BothKT) RemoveMe2() {
+func (b TypeWithKT) RemoveMe2() {
 	b.K = new(KT)
 	b.V = new(VT)
 }
 
+func DoParam(b *TypeWithKT)            {}
+func DoRes() *TypeWithKT               { return nil }
+func DoBoth(b *TypeWithKT) *TypeWithKT { return nil }
+
 func DoStuff(k ...KT) VT {
-	var b BothKT
+	b := &TypeWithKT{}
 	return b.Call(k[0])
+}
+
+func DoStuff2(k ...KT) VT {
+	var b TypeWithKT
+	return b.RemoveMe2
 }
 
 var (
 	m    map[KT]VT
 	ktCh chan KT
 	vtCh chan VT
-	kvCh chan BothKT
+	kvCh chan TypeWithKT
 	ktA  [100]KT
 	vtA  [100]VT
-	a    [100]BothKT
+	a    [100]TypeWithKT
 	ktS  []KT
 	vtS  []VT
-	s    []BothKT
+	s    []*TypeWithKT
+	m    map[TypeWithKT]int
+	mp   map[*TypeWithKT]int
 )
 
 func XXX(vs ...interface{}) interface{} {

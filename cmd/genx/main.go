@@ -22,7 +22,7 @@ func flattenFlags(in []string) (out sflags) {
 			case 2:
 				out = append(out, &[2]string{strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])})
 			case 1:
-				out = append(out, &[2]string{strings.TrimSpace(kv[0]), ""})
+				out = append(out, &[2]string{strings.TrimSpace(kv[0])})
 			}
 		}
 	}
@@ -56,13 +56,13 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    "input",
-				Aliases: []string{"i", "f" /* compatibility */},
+				Aliases: []string{"i"},
 				Usage:   "`file` to process, use `-` to process stdin.",
 			},
 
 			&cli.StringFlag{
 				Name:    "package",
-				Aliases: []string{"-pkg"},
+				Aliases: []string{"pkg"},
 				Usage:   "`package` to process.",
 			},
 
@@ -86,13 +86,13 @@ func main() {
 
 			&cli.StringSliceFlag{
 				Name:    "field",
-				Aliases: []string{"-fld"},
+				Aliases: []string{"fld"},
 				Usage:   "struct `field`s to remove or rename (ex: -fld HashFn -fld privateFunc=PublicFunc).",
 			},
 
 			&cli.StringSliceFlag{
 				Name:    "func",
-				Aliases: []string{"-fn"},
+				Aliases: []string{"fn"},
 				Usage:   "`func`tions to remove or rename (ex: -fn NotNeededFunc -fn Something=SomethingElse).",
 			},
 

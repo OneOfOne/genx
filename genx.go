@@ -49,11 +49,20 @@ func New(pkgName string, rewriters map[string]string) *GenX {
 	}
 
 	g.rewriteFuncs = map[reflect.Type][]procFunc{
-		reflect.TypeOf((*ast.TypeSpec)(nil)): {g.rewriteTypeSpec},
-		reflect.TypeOf((*ast.Ident)(nil)):    {g.rewriteIdent},
-		reflect.TypeOf((*ast.Field)(nil)):    {g.rewriteField},
-		reflect.TypeOf((*ast.FuncDecl)(nil)): {g.rewriteFuncDecl},
-		reflect.TypeOf((*ast.File)(nil)):     {g.rewriteFile},
+		reflect.TypeOf((*ast.TypeSpec)(nil)):      {g.rewriteTypeSpec},
+		reflect.TypeOf((*ast.Ident)(nil)):         {g.rewriteIdent},
+		reflect.TypeOf((*ast.Field)(nil)):         {g.rewriteField},
+		reflect.TypeOf((*ast.FuncDecl)(nil)):      {g.rewriteFuncDecl},
+		reflect.TypeOf((*ast.File)(nil)):          {g.rewriteFile},
+		reflect.TypeOf((*ast.Comment)(nil)):       {g.rewriteComment},
+		reflect.TypeOf((*ast.SelectorExpr)(nil)):  {g.rewriteSelectorExpr},
+		reflect.TypeOf((*ast.KeyValueExpr)(nil)):  {g.rewriteKeyValueExpr},
+		reflect.TypeOf((*ast.InterfaceType)(nil)): {g.rewriteInterfaceType},
+		reflect.TypeOf((*ast.ReturnStmt)(nil)):    {g.rewriteReturnStmt},
+		reflect.TypeOf((*ast.ArrayType)(nil)):     {g.rewriteArrayType},
+		reflect.TypeOf((*ast.ChanType)(nil)):      {g.rewriteChanType},
+		reflect.TypeOf((*ast.MapType)(nil)):       {g.rewriteMapType},
+		reflect.TypeOf((*ast.FuncType)(nil)):      {g.rewriteFuncType},
 	}
 
 	for k, v := range rewriters {
@@ -198,107 +207,9 @@ func (g *GenX) rewrite(node *xast.Node) *xast.Node {
 				break
 			}
 		}
-		return node
-	}
-
-	switch n := n.(type) {
-	case *ast.Field:
-		n.Type = g.rewriteExprTypes("type:", n.Type)
-
-		if len(n.Names) == 0 {
-			break
-		}
-
-		names := n.Names[:0]
-		for _, n := range n.Names {
-			nn, ok := g.rewriters["field:"+n.Name]
-			if nn == "-" {
-				continue
-			}
-			if ok {
-				n.Name = nn
-			} else {
-				n.Name = g.irepl.Replace(n.Name)
-			}
-			names = append(names, n)
-
-		}
-
-		if n.Names = names; len(n.Names) == 0 {
-			return node.Delete()
-		}
-
-	case *ast.Comment:
-		for _, f := range g.CommentFilters {
-			if n.Text = f(n.Text); n.Text == "" {
-				return node.Delete()
-			}
-		}
-
-	case *ast.KeyValueExpr:
-		if key := getIdent(n.Key); key != nil && g.rewriters["field:"+key.Name] == "-" {
-			return node.Delete()
-		}
-
-	case *ast.SelectorExpr:
-		if x := getIdent(n.X); x != nil && n.Sel != nil {
-			if nv := g.rewriters["selector:."+n.Sel.Name]; nv != "" {
-				n.Sel.Name = nv
-				break
-			}
-			nv := g.rewriters["selector:"+x.Name+"."+n.Sel.Name]
-			if nv == "" {
-				if x.Name == g.pkgName {
-					x.Name = n.Sel.Name
-					return node.SetNode(x)
-				}
-				x.Name, n.Sel.Name = g.irepl.Replace(x.Name), g.irepl.Replace(n.Sel.Name)
-				break
-			}
-			if nv == "-" {
-				return node.Delete()
-			}
-			if xsel := strings.Split(nv, "."); len(xsel) == 2 {
-				x.Name, n.Sel.Name = xsel[0], xsel[1]
-				break
-			} else {
-				x.Name = nv
-				return node.SetNode(x)
-			}
-
-		}
-	case *ast.InterfaceType:
-		if n.Methods != nil && len(n.Methods.List) == 0 {
-			if nt := g.rewriters["type:interface{}"]; nt != "" {
-				return node.SetNode(&ast.Ident{
-					Name: nt,
-				})
-			}
-		}
-	case *ast.ReturnStmt:
-		for i, r := range n.Results {
-			if rt := getIdent(r); rt != nil && rt.Name == "nil" {
-				crt := cleanUpName.ReplaceAllString(g.curReturnTypes[i], "")
-				if _, ok := g.zeroTypes[crt]; ok {
-					g.zeroTypes[crt] = true
-					rt.Name = "zero_" + cleanUpName.ReplaceAllString(crt, "")
-				}
-			}
-		}
-	case *ast.File:
-
 	}
 
 	return node
-}
-
-func indexOf(ss []string, v string) int {
-	for i, s := range ss {
-		if s == v {
-			return i
-		}
-	}
-	return -1
 }
 
 func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
@@ -310,6 +221,20 @@ func (g *GenX) shouldNukeFuncBody(bs *ast.BlockStmt) (found bool) {
 			return false
 		}
 		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			x := getIdent(n.X)
+			if x == nil {
+				break
+			}
+			if x.Obj != nil && x.Obj.Type != nil {
+				ot := getIdent(x.Obj.Type)
+				if found = ot != nil && g.rewriters["type:"+ot.Name] == "-"; found {
+					return false
+				}
+			}
+			if found = g.rewriters["field:"+n.Sel.Name] == "-"; found {
+				return false
+			}
 		case *ast.Ident:
 			if found = g.rewriters["type:"+n.Name] == "-"; found {
 				return false
@@ -354,17 +279,7 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
 			return nil
 		}
-	case *ast.ArrayType:
-		if t.Elt = g.rewriteExprTypes(prefix, t.Elt); t.Elt == nil {
-			return nil
-		}
-	case *ast.MapType:
-		if t.Key = g.rewriteExprTypes(prefix, t.Key); t.Key == nil {
-			return nil
-		}
-		if t.Value = g.rewriteExprTypes(prefix, t.Value); t.Value == nil {
-			return nil
-		}
+
 	case *ast.FuncType:
 		if t.Params != nil {
 			for _, p := range t.Params.List {
@@ -388,7 +303,7 @@ func (g *GenX) rewriteExprTypes(prefix string, ex ast.Expr) ast.Expr {
 	return ex
 }
 
-func getIdent(ex ast.Expr) *ast.Ident {
+func getIdent(ex interface{}) *ast.Ident {
 	switch ex := ex.(type) {
 	case *ast.Ident:
 		return ex
